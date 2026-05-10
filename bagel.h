@@ -1,9 +1,10 @@
 // Copyright (C) 2026 Moshe Sulamy
 
 #pragma once
-//#include <cstdlib>
+#include <cstdlib>
 #include <cstdint>
 #include <type_traits>
+#include <algorithm>
 
 namespace bagel
 {

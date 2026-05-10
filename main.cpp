@@ -78,6 +78,12 @@ int main() {
     SDL_FRect playerTextDst = { 499.0f, 312.0f, 114.0f, 28.0f };
     SDL_FRect EnemyTextSrc = { 1182.0f, 12.0f, 57.0f, 14.0f };
     SDL_FRect EnemyTextDst = { 55.0f, 53.0f, 114.0f, 28.0f };
+    SDL_FRect menuSrc = { 120.0f, 4.0f, 220.0f, 116.0f };
+    SDL_FRect menuDst = { 472.0f, 432.0f, 220.0f, 116.0f };
+    SDL_FRect digit4Src = { 92.0f, 206.0f, 61.0f, 61.0f };
+    SDL_FRect digit6Src = { 199.0f, 246.0f, 45.0f, 21.0f };
+    SDL_FRect enemyLvlDst = { 145.0f, 52.0f, 24.0f, 24.0f };
+    SDL_FRect playerLvlDst = { 589.0f, 318.0f, 24.0f, 24.0f };
     SDL_FRect enemyDstBase = { 483.0f, 64.0f, 160.0f, 160.0f };
     SDL_FRect enemySrc = { 1185.0f, 55.0f, 50.0f, 45.0f };
 
@@ -172,8 +178,11 @@ int main() {
 
         SDL_RenderTexture(ren, uiTex, &playerHpSrc, &playerHpDst);
         SDL_RenderTexture(ren, uiTex, &msgBoxSrc, &msgBoxDst);
+        SDL_RenderTexture(ren, uiTex, &menuSrc, &menuDst);
         SDL_RenderTexture(ren, playerText, &playerTextSrc, &playerTextDst);
         SDL_RenderTexture(ren, enemyText, &EnemyTextSrc, &EnemyTextDst);
+        SDL_RenderTexture(ren, uiTex, &digit4Src, &enemyLvlDst);
+        SDL_RenderTexture(ren, uiTex, &digit6Src, &playerLvlDst);
         SDL_RenderPresent(ren);
         SDL_Delay(16);
     }

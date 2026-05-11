@@ -13,49 +13,66 @@ enum BattleState {
     TACKLE_RETURN,
     FINAL_IDLE
 };
-// 1. Define the font dictionary
+
 std::unordered_map<char, SDL_FRect> fontMap;
 
 void InitFont() {
     fontMap.clear();
 
-    float startX = 169.0f;
-    float startY = 122.0f;
-    float charW = 7.0f;
-    float charH = 11.0f;
-    float stepX = 7.0f;
+    // --- Uppercase Alphabet Configuration ---
+    float upperX = 170.0f;
+    float upperY = 122.0f;
+    float upperW = 6.0f;
+    float upperH = 11.0f;
+    float upperStepX = 7.0f;
 
-    std::string row = {
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ.,", // Row 1
+    std::string upperRow = "ABCDEFGHIJKLMNOPQRSTUVWXYZ.,";
 
-    };
-
-    for (int i = 0; i < (int)row.length(); ++i) {
-        char c = row[i];
+    for (int i = 0; i < (int)upperRow.length(); ++i) {
+        char c = upperRow[i];
         fontMap[c] = {
-            startX + (i * stepX),
-            startY,
-            charW,
-            charH
+            upperX + (i * upperStepX),
+            upperY,
+            upperW,
+            upperH
+        };
+    }
+
+    // --- Numbers Configuration ---
+    float numX = 170.0f;
+    float numY = 157.0f;
+    float numW = 6.0f;
+    float numH = 10.0f;
+    float numStepX = 7.0f;
+
+    std::string numRow = "0123456789";
+
+    for (int i = 0; i < (int)numRow.length(); ++i) {
+        char c = numRow[i];
+        fontMap[c] = {
+            numX + (i * numStepX),
+            numY,
+            numW,
+            numH
         };
     }
 }
 
 // 2. Helper function to render text using the dictionary
-    void RenderText(SDL_Renderer* ren, SDL_Texture* tex, const std::string& text, float x, float y, float scale) {
-        float currentX = x;
-        for (char c : text) {
-            if (fontMap.count(c)) {
-                SDL_FRect src = fontMap[c];
-                SDL_FRect dst = { currentX, y, src.w * scale, src.h * scale };
-                SDL_RenderTexture(ren, tex, &src, &dst);
+void RenderText(SDL_Renderer* ren, SDL_Texture* tex, const std::string& text, float x, float y, float scale) {
+    float currentX = x;
+    for (char c : text) {
+        if (fontMap.count(c)) {
+            SDL_FRect src = fontMap[c];
+            SDL_FRect dst = { currentX, y, src.w * scale, src.h * scale };
+            SDL_RenderTexture(ren, tex, &src, &dst);
 
-                currentX += (src.w + 1.0f) * scale;
-            } else if (c == ' ') {
-                currentX += (6.0f * scale);
-            }
+            currentX += (src.w + 1.0f) * scale;
+        } else if (c == ' ') {
+            currentX += (6.0f * scale);
         }
     }
+}
 
 int main() {
     SDL_Init(SDL_INIT_VIDEO);
@@ -105,6 +122,14 @@ int main() {
         SDL_DestroySurface(ptSurf);
     }
 
+    SDL_Texture* TypesTex = nullptr;
+    SDL_Surface* tsSurf = IMG_Load("res/Type.png");
+    if (tsSurf) {
+        SDL_SetSurfaceColorKey(tsSurf, true, SDL_MapSurfaceRGB(tsSurf, 152, 152, 184));
+        TypesTex = SDL_CreateTextureFromSurface(ren, tsSurf);
+        SDL_DestroySurface(tsSurf);
+    }
+
     SDL_FRect bgSrc = { 268.0f, 4.0f, 216.0f, 112.0f };
     SDL_FRect bgDst = { 0.0f, -80.0f, 800.0f, 500.0f };
     SDL_FRect msgBoxSrc = { 293.0f, 2.0f, 250.0f, 50.0f };
@@ -123,14 +148,18 @@ int main() {
     SDL_FRect playerTextDst = { 499.0f, 312.0f, 114.0f, 28.0f };
     SDL_FRect EnemyTextSrc = { 1182.0f, 12.0f, 57.0f, 14.0f };
     SDL_FRect EnemyTextDst = { 55.0f, 53.0f, 114.0f, 28.0f };
+    SDL_FRect TypeNormalDst = { 625.0f, 515.0f, 120.0f, 55.0f };
+    SDL_FRect TypeNormalSrc = { 0.0f, 0.0f, 31.0f, 15.0f };
+    SDL_FRect TypeFireDst = { 55.0f, 53.0f, 114.0f, 28.0f };
+    SDL_FRect TypeFireSrc = { 32.0f, 0.0f, 31.0f, 15.0f };
+    SDL_FRect StatusFireDst = { 49.0f, 80.0f, 45.0f, 20.0f };
+    SDL_FRect StatusFireSrc = { 5.0f, 88.0f, 21.0f, 8.0f };
+
     //SDL_FRect menuSrc = { 144.0f, 2.0f, 124.0f, 56.0f };
     //SDL_FRect menuDst = { 430.0f, 412.0f, 380.0f, 210.0f };
     SDL_FRect dotSrc = { 266.0f, 2.0f, 9.0f, 12.0f };
     SDL_FRect dotDst = { 30.0f, 475.0f, 20.0f, 18.0f };
-    SDL_FRect digit4Src = { 197.0f, 159.0f, 8.0f, 14.0f };
-    SDL_FRect digit6Src = { 211.0f, 156.0f, 8.0f, 14.0f };
-    SDL_FRect enemyLvlDst = { 264.0f, 61.0f, 24.0f, 24.0f };
-    SDL_FRect playerLvlDst = { 720.0f, 316.0f, 24.0f, 24.0f };
+
     SDL_FRect enemyDstBase = { 483.0f, 64.0f, 160.0f, 160.0f };
     SDL_FRect enemySrc = { 1185.0f, 55.0f, 50.0f, 45.0f };
 
@@ -228,9 +257,13 @@ int main() {
         //SDL_RenderTexture(ren, uiTex, &menuSrc, &menuDst);
         SDL_RenderTexture(ren, playerText, &playerTextSrc, &playerTextDst);
         SDL_RenderTexture(ren, enemyText, &EnemyTextSrc, &EnemyTextDst);
-        SDL_RenderTexture(ren, uiTex, &digit4Src, &enemyLvlDst);
-        SDL_RenderTexture(ren, uiTex, &digit6Src, &playerLvlDst);
         SDL_RenderTexture(ren, uiTex, &dotSrc, &dotDst);
+        SDL_RenderTexture(ren, TypesTex, &TypeNormalSrc, &TypeNormalDst);
+        SDL_RenderTexture(ren, TypesTex, &StatusFireSrc, &StatusFireDst);
+        RenderText(ren, uiTex, "4", 268.0f, 53.0f, 2.3f);
+        RenderText(ren, uiTex, "6", 721.0f, 315.0f, 2.3f);
+        RenderText(ren, uiTex, "30", 600.0f, 470.0f, 3.0f);
+        RenderText(ren, uiTex, "30", 720.0f, 470.0f, 3.0f);
         RenderText(ren, uiTex, "TACKLE", 50.0f, 470.0f, 3.0f);
         RenderText(ren, uiTex, "EMBER", 320.0f, 470.0f, 3.0f);
         SDL_RenderPresent(ren);

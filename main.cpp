@@ -14,6 +14,8 @@ enum BattleState {
     ENEMY_HIT,
     PLAYER_HIT,
     AI_ATTACK,
+    MESSAGE_PLAYER_ATTACK,
+    MESSAGE_ENEMY_ATTACK,
     FINAL_IDLE
 };
 
@@ -82,13 +84,40 @@ void RenderText(SDL_Renderer* ren, SDL_Texture* tex, const std::string& text, fl
     }
 }
 
-// TODO: Implement Ember animation with sprite frames
-void PlayEmberAnimation(SDL_Renderer* ren, SDL_Texture* tex, float x, float y, float& stateTimer) {
-    // Placeholder for Ember attack animation
-    // Will be filled in with actual animation frames
-    return;
+// Renders the Ember animation, cycling through 5 frames moving downwards on the sprite sheet
+void PlayEmberAnimation(SDL_Renderer* ren, SDL_Texture* movesTex,SDL_FRect *Dst, float stateTimer) {
+    if (!movesTex) return; // Safety check
+
+    const int totalFrames = 5;
+    const float duration = 1.0f;
+    const float timePerFrame = duration / totalFrames;
+
+    // Determine the current frame index (0 to 4) based on the state timer
+    int currentFrame = static_cast<int>(stateTimer / timePerFrame);
+    if (currentFrame >= totalFrames) {
+        currentFrame = totalFrames - 1; // Clamp to the last frame to prevent overflow
+    }
+
+    // Define the Source Rectangle based on your specific coordinates
+    SDL_FRect src;
+    src.x = 242.0f;
+    src.y = 1165.0f + (currentFrame * 30.0f); // Move down 30 pixels per frame
+    src.w = 30.0f;
+    src.h = 30.0f;
+
+    SDL_RenderTexture(ren, movesTex, &src, Dst);
 }
 
+// Function to smoothly decrease HP over time
+void UpdateHP(float& currentHP, float startHP, float targetHP, float stateTimer, float duration) {
+    if (stateTimer >= duration) {
+        currentHP = targetHP;
+    } else {
+        // Linear Interpolation: current = start + (end - start) * (progress)
+        float progress = stateTimer / duration;
+        currentHP = startHP + (targetHP - startHP) * progress;
+    }
+}
 int main() {
     SDL_Init(SDL_INIT_VIDEO);
     SDL_Window* win;
@@ -145,17 +174,29 @@ int main() {
         SDL_DestroySurface(tsSurf);
     }
 
+    SDL_Texture* movesTex = nullptr;
+    SDL_Surface* mSurf = IMG_Load("res/Moves.png");
+    if (mSurf) {
+        // Set the color key to black (0, 0, 0) to make the background transparent
+        SDL_SetSurfaceColorKey(mSurf, true, SDL_MapSurfaceRGB(mSurf, 0, 0, 0));
+        movesTex = SDL_CreateTextureFromSurface(ren, mSurf);
+        SDL_DestroySurface(mSurf);
+    }
+    
+
     SDL_FRect bgSrc = { 268.0f, 4.0f, 216.0f, 112.0f };
     SDL_FRect bgDst = { 0.0f, -80.0f, 800.0f, 500.0f };
     SDL_FRect msgBoxSrc = { 293.0f, 2.0f, 250.0f, 50.0f };
-    SDL_FRect msgBoxDst = { 0.0f, 420.0f, 800.0f, 180.0f };
+    SDL_FRect msgBoxDst = { -13.0f, 415.0f, 830.0f, 184.0f };
+    SDL_FRect msg2BoxSrc = { 298.0f, 55.0f, 250.0f, 50.0f };
+    SDL_FRect msg2BoxDst = { 2.0f, 415.0f, 834.0f, 184.0f };
     SDL_FRect enemyHpSrc = { 3.0f, 3.0f, 100.0f, 30.0f };
-    SDL_FRect enemyHpDst = { 40.0f, 40.0f, 280.0f, 84.0f };
+    SDL_FRect enemyHpDst = { 40.0f, 40.0f, 280.0f, 89.0f };
     SDL_FRect playerHpSrc = { 3.0f, 44.0f, 104.0f, 37.0f };
     SDL_FRect playerHpDst = { 460.0f, 300.0f, 300.0f, 106.0f };
 
     SDL_FRect hpBarGreenSrc = { 117.0f, 9.0f, 9.0f, 3.0f };
-    SDL_FRect hpBarBlackSrc = { 117.0f, 22.0f, 9.0f, 3.0f };
+    SDL_FRect hpBarBlackSrc = { 117.0f, 21.0f, 9.0f, 3.0f };
 
     SDL_FRect playerDstBase = { 68.0f, 234.0f, 190.0f, 190.0f };
     SDL_FRect playerSrc = { 405.0f, 55.0f, 50.0f, 45.0f };
@@ -163,9 +204,9 @@ int main() {
     SDL_FRect playerTextDst = { 499.0f, 312.0f, 114.0f, 28.0f };
     SDL_FRect EnemyTextSrc = { 1182.0f, 12.0f, 57.0f, 14.0f };
     SDL_FRect EnemyTextDst = { 55.0f, 53.0f, 114.0f, 28.0f };
-    SDL_FRect TypeNormalDst = { 625.0f, 515.0f, 120.0f, 55.0f };
+    SDL_FRect TypeNormalDst = { 635.0f, 515.0f, 120.0f, 55.0f };
     SDL_FRect TypeNormalSrc = { 0.0f, 0.0f, 31.0f, 15.0f };
-    SDL_FRect TypeFireDst = { 625.0f, 515.0f, 120.0f, 55.0f };
+    SDL_FRect TypeFireDst = { 635.0f, 515.0f, 120.0f, 55.0f };
     SDL_FRect TypeFireSrc = { 64.0f, 32.0f, 31.0f, 15.0f };
     SDL_FRect StatusFireDst = { 49.0f, 80.0f, 45.0f, 20.0f };
     SDL_FRect StatusFireSrc = { 5.0f, 88.0f, 21.0f, 8.0f };
@@ -183,10 +224,16 @@ int main() {
     float stateTimer = 0.0f;
     float idleTimer = 0.0f;
     float enemyHP = 1.0f;
+    float enemyHPAtStartOfHit = 1.0f;
+    float playerHPAtStartOfHit = 1.0f;
     float playerHP = 1.0f;
+    float targetEnemyHP = enemyHP;
+    float targetPlayerHP = playerHP;
     float enemyYOffset = 0.0f;
     bool enemyVisible = true;
+    bool playerVisible = true;
     bool running = true;
+    std::string messageText;
     
     // Attack Power Points (PP) system
     int tacklePPCurrent = 30;
@@ -194,8 +241,8 @@ int main() {
     int emberPPCurrent = 15;
     int emberPPMax = 15;
     
-    float playerDamageTaken = 0.25f;
-    float enemyDamageTaken = 0.15f;
+    float playerDamageTaken = 0.5f;
+    float enemyDamageTaken = 0.35f;
     
     SDL_Event ev;
     InitFont();
@@ -212,14 +259,14 @@ int main() {
                 } else if (ev.key.key == SDLK_RETURN) {
                     // Confirm attack selection
                     if (currentAttack == ATTACK_TACKLE && tacklePPCurrent > 0) {
-                        currentState = START_IDLE;
+                        messageText = "CHARMANDER USES TACKLE";
+                        currentState = MESSAGE_PLAYER_ATTACK;
                         stateTimer = 0.0f;
-                        idleTimer = 0.0f;
                         tacklePPCurrent--;
                     } else if (currentAttack == ATTACK_EMBER && emberPPCurrent > 0) {
-                        currentState = START_IDLE;
+                        messageText = "CHARMANDER USES EMBER";
+                        currentState = MESSAGE_PLAYER_ATTACK;
                         stateTimer = 0.0f;
-                        idleTimer = 0.0f;
                         emberPPCurrent--;
                     }
                 }
@@ -239,7 +286,7 @@ int main() {
 
             case START_IDLE:
                 idleTimer += 0.05f;
-                playerDst.y += std::sin(idleTimer) * 4.0f;
+                playerDst.y += std::sin(idleTimer) * 20.0f;
                 if (stateTimer >= 0.5f) {
                     // Transition to appropriate attack
                     if (currentAttack == ATTACK_TACKLE) {
@@ -255,44 +302,55 @@ int main() {
                 playerDst.x += (stateTimer * 1200.0f);
                 playerDst.y -= (stateTimer * 400.0f);
                 if (playerDst.x > 380.0f) {
+                    enemyHPAtStartOfHit = enemyHP;
+                    targetEnemyHP = enemyHP - enemyDamageTaken;
+                    if (targetEnemyHP <= 0.0f) targetEnemyHP = 0.0f;
+
+                    currentState = ENEMY_HIT;
                     stateTimer = 0.0f;
-                    enemyHP -= enemyDamageTaken;
-                    if (enemyHP <= 0.0f) {
-                        enemyHP = 0.0f;
-                        currentState = FINAL_IDLE;
-                    } else {
-                        currentState = ENEMY_HIT;
-                    }
                 }
                 break;
 
             case EMBER_MOVE:
-                // TODO: Implement Ember animation with proper sprite frames
-                PlayEmberAnimation(ren, playerTex, playerDst.x, playerDst.y, stateTimer);
-                
-                if (stateTimer >= 0.6f) {
+
+                if (stateTimer >= 1.0f) {
+                    enemyHPAtStartOfHit = enemyHP;
+                    targetEnemyHP = enemyHP - enemyDamageTaken;
+                    if (targetEnemyHP <= 0.0f) targetEnemyHP = 0.0f;
+
+                    currentState = ENEMY_HIT;
                     stateTimer = 0.0f;
-                    enemyHP -= enemyDamageTaken;
-                    if (enemyHP <= 0.0f) {
-                        enemyHP = 0.0f;
-                        currentState = FINAL_IDLE;
-                    } else {
-                        currentState = ENEMY_HIT;
-                    }
                 }
                 break;
 
             case ENEMY_HIT:
+                UpdateHP(enemyHP, enemyHPAtStartOfHit, targetEnemyHP, stateTimer, 0.6f);
                 enemyVisible = (int(stateTimer * 100) % 2 == 0);
                 enemyDst.x += (std::rand() % 10) - 5;
                 if (stateTimer > 0.6f) {
                     enemyVisible = true;
                     playerDst = playerDstBase;
-                    if (enemyHP <= 0.0f) {
+                    if (targetEnemyHP <= 0.0f) {
                         currentState = FINAL_IDLE;
                     } else {
-                        currentState = AI_ATTACK;
+                        messageText = "CATERPIE USES TACKLE";
+                        currentState = MESSAGE_ENEMY_ATTACK;
                     }
+                    stateTimer = 0.0f;
+                }
+                break;
+
+            case MESSAGE_PLAYER_ATTACK:
+                if (stateTimer >= 1.0f) {
+                    currentState = START_IDLE;
+                    stateTimer = 0.0f;
+                    idleTimer = 0.0f;
+                }
+                break;
+
+            case MESSAGE_ENEMY_ATTACK:
+                if (stateTimer >= 1.0f) {
+                    currentState = AI_ATTACK;
                     stateTimer = 0.0f;
                 }
                 break;
@@ -300,37 +358,41 @@ int main() {
             case AI_ATTACK:
                 enemyDst.x -= (stateTimer * 120.0f);
                 if (stateTimer > 0.5f) {
-                    playerHP -= playerDamageTaken;
-                    if (playerHP <= 0.0f) {
-                        playerHP = 0.0f;
-                        currentState = FINAL_IDLE;
-                    } else {
-                        currentState = PLAYER_HIT;
+                    // We will add playerHPAtStartOfHit in the next step
+                    playerHPAtStartOfHit = playerHP;
+                    targetPlayerHP = playerHP - playerDamageTaken;
+
+                    if (targetPlayerHP <= 0.0f) {
+                        targetPlayerHP = 0.0f;
                     }
+
+                    // Always transition to PLAYER_HIT to allow the animation to play
+                    currentState = PLAYER_HIT;
                     stateTimer = 0.0f;
                 }
                 break;
 
             case PLAYER_HIT:
-                playerDst.y += (int(stateTimer * 100) % 2 == 0 ? 2.0f : -2.0f);
+                UpdateHP(playerHP, playerHPAtStartOfHit, targetPlayerHP, stateTimer, 0.6f);
+                playerVisible = (int(stateTimer * 100) % 2 == 0);
                 if (stateTimer > 0.6f) {
                     playerDst = playerDstBase;
-                    if (playerHP <= 0.0f) {
+                    if (targetPlayerHP <= 0.0f) {
                         currentState = FINAL_IDLE;
                     } else {
                         currentState = ATTACK_SELECT;
+                        stateTimer = 0.0f;
+                        idleTimer = 0.0f;
                     }
-                    stateTimer = 0.0f;
-                    idleTimer = 0.0f;
                 }
                 break;
 
             case FINAL_IDLE:
-                if (playerHP <= 0.0f) {
+                if (targetPlayerHP <= 0.0f) {
                     playerDst.y += 5.0f;
                 }
 
-                if (enemyHP <= 0.0f) {
+                if (targetEnemyHP <= 0.0f) {
                     if (enemyYOffset < 335.0f) {
                         enemyYOffset += 5.0f;
                     }
@@ -340,64 +402,75 @@ int main() {
 
         SDL_RenderClear(ren);
         SDL_RenderTexture(ren, bgTex, &bgSrc, &bgDst);
-        SDL_RenderTexture(ren, playerTex, &playerSrc, &playerDst);
+        if (playerVisible) {
+            SDL_RenderTexture(ren, playerTex, &playerSrc, &playerDst);
+        }
         if (enemyVisible) {
             SDL_RenderTexture(ren, enemyTex, &enemySrc, &enemyDst);
         }
+        if (currentState == EMBER_MOVE) {
+            PlayEmberAnimation(ren, movesTex, &enemyDst, stateTimer);
+        }
         SDL_RenderTexture(ren, uiTex, &enemyHpSrc, &enemyHpDst);
+        SDL_RenderTexture(ren, uiTex, &playerHpSrc, &playerHpDst);
 
-        SDL_FRect hpBarDst = { 148.6f, 88.2f, 136.4f, 8.4f};
-        SDL_FRect hpBlackBarDst = { 141.6f, 88.2f, 146.4f, 15.4f };
+        //enemy HP bar
+        SDL_FRect enemyhpBarDst = { 149.0f, 89.0f, 134.0f, 12.0f};
+        SDL_FRect enemyhpBlackBarDst = { 145.0f, 89.0f, 143.0f, 12.0f };
 
-        SDL_RenderTexture(ren, uiTex, &hpBarBlackSrc, &hpBlackBarDst);
+        SDL_RenderTexture(ren, uiTex, &hpBarBlackSrc, &enemyhpBlackBarDst);
         if (enemyHP > 0.0f) {
-            SDL_FRect hpGreenDst = hpBarDst;
-            hpGreenDst.w *= enemyHP;
-            SDL_RenderTexture(ren, uiTex, &hpBarGreenSrc, &hpGreenDst);
+            SDL_FRect enemyhpGreenDst = enemyhpBarDst;
+            enemyhpGreenDst.w *= enemyHP;
+            SDL_RenderTexture(ren, uiTex, &hpBarGreenSrc, &enemyhpGreenDst);
         }
 
-        SDL_RenderTexture(ren, uiTex, &playerHpSrc, &playerHpDst);
-        SDL_RenderTexture(ren, uiTex, &msgBoxSrc, &msgBoxDst);
+        //player HP bar
+        SDL_FRect playerHpBarDst = { 598.6f, 347.0f, 135.0f, 12.0f };
+        SDL_FRect playerHpBlackBarDst = { 597.0f, 347.0f, 144.0f, 12.0f };
+        SDL_RenderTexture(ren, uiTex, &hpBarBlackSrc, &playerHpBlackBarDst);
+        if (playerHP > 0.0f) {
+            SDL_FRect playerHpGreenDst = playerHpBarDst;
+            playerHpGreenDst.w *= playerHP;
+            SDL_RenderTexture(ren, uiTex, &hpBarGreenSrc, &playerHpGreenDst);
+        }
+
+        SDL_FRect currentMsgBoxDst = msgBoxDst;
+        SDL_FRect currentMsgBoxSrc = msgBoxSrc;
+        if (currentState != ATTACK_SELECT ) {
+
+            currentMsgBoxDst = msg2BoxDst;
+            currentMsgBoxSrc = msg2BoxSrc;
+        }
+
+
+        SDL_RenderTexture(ren, uiTex, &currentMsgBoxSrc, &currentMsgBoxDst);
         SDL_RenderTexture(ren, playerText, &playerTextSrc, &playerTextDst);
         SDL_RenderTexture(ren, enemyText, &EnemyTextSrc, &EnemyTextDst);
+        RenderText(ren, uiTex, "4", 268.0f, 53.0f, 2.3f);
+        RenderText(ren, uiTex, "6", 721.0f, 315.0f, 2.3f);
         
-        // Render dot based on selected attack
-        SDL_FRect dotDstAdjusted = dotDst;
+        // Render dot and attack names only in ATTACK_SELECT
         if (currentState == ATTACK_SELECT) {
+            // Render dot based on selected attack
+            SDL_FRect dotDstAdjusted = dotDst;
             if (currentAttack == ATTACK_TACKLE) {
                 dotDstAdjusted.x = 30.0f;  // Tackle position (left)
             } else {
                 dotDstAdjusted.x = 300.0f;
             }
-        } else {
-            dotDstAdjusted.x = 30.0f; // Default to tackle during battle
-        }
-        SDL_RenderTexture(ren, uiTex, &dotSrc, &dotDstAdjusted);
-        
-        // Render type based on selected attack
-        if (currentState == ATTACK_SELECT) {
+            SDL_RenderTexture(ren, uiTex, &dotSrc, &dotDstAdjusted);
+            
+            // Render type based on selected attack
             if (currentAttack == ATTACK_TACKLE) {
                 SDL_RenderTexture(ren, TypesTex, &TypeNormalSrc, &TypeNormalDst);
             } else {
                 SDL_RenderTexture(ren, TypesTex, &TypeFireSrc, &TypeFireDst);
             }
-        } else {
-            // During battle, show the attack type that was used
-            if (currentAttack == ATTACK_TACKLE) {
-                SDL_RenderTexture(ren, TypesTex, &TypeNormalSrc, &TypeNormalDst);
-            } else {
-                SDL_RenderTexture(ren, TypesTex, &TypeFireSrc, &TypeFireDst);
-            }
-        }
-        
-        SDL_RenderTexture(ren, TypesTex, &StatusFireSrc, &StatusFireDst);
-        RenderText(ren, uiTex, "4", 268.0f, 53.0f, 2.3f);
-        RenderText(ren, uiTex, "6", 721.0f, 315.0f, 2.3f);
+            
 
-        // Display PP for selected attack
 
-        
-        if (currentState == ATTACK_SELECT) {
+            // Display PP for selected attack
             if (currentAttack == ATTACK_TACKLE) {
                 RenderText(ren, uiTex, std::to_string(tacklePPCurrent), 600.0f, 470.0f, 3.0f);
                 RenderText(ren, uiTex, std::to_string(tacklePPMax), 720.0f, 470.0f, 3.0f);
@@ -405,10 +478,14 @@ int main() {
                 RenderText(ren, uiTex, std::to_string(emberPPCurrent), 600.0f, 470.0f, 3.0f);
                 RenderText(ren, uiTex, std::to_string(emberPPMax), 720.0f, 470.0f, 3.0f);
             }
+            
+            RenderText(ren, uiTex, "TACKLE", 50.0f, 470.0f, 3.0f);
+            RenderText(ren, uiTex, "EMBER", 320.0f, 470.0f, 3.0f);
+        } else if (currentState == MESSAGE_PLAYER_ATTACK || currentState == MESSAGE_ENEMY_ATTACK) {
+            // Render message text
+            RenderText(ren, uiTex, messageText, 50.0f, 470.0f, 3.0f);
         }
         
-        RenderText(ren, uiTex, "TACKLE", 50.0f, 470.0f, 3.0f);
-        RenderText(ren, uiTex, "EMBER", 320.0f, 470.0f, 3.0f);
         SDL_RenderPresent(ren);
         SDL_Delay(16);
     }
@@ -419,6 +496,8 @@ int main() {
     SDL_DestroyTexture(enemyTex);
     SDL_DestroyTexture(enemyText);
     SDL_DestroyTexture(playerText);
+    SDL_DestroyTexture(movesTex);
+    SDL_DestroyTexture(TypesTex);
     SDL_DestroyRenderer(ren);
     SDL_DestroyWindow(win);
     SDL_Quit();

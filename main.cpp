@@ -11,6 +11,7 @@ enum BattleState {
     START_IDLE,
     TACKLE_MOVE,
     EMBER_MOVE,
+    POISON_POWDER_MOVE,
     ENEMY_HIT,
     PLAYER_HIT,
     AI_ATTACK,
@@ -83,6 +84,55 @@ void RenderText(SDL_Renderer* ren, SDL_Texture* tex, const std::string& text, fl
         }
     }
 }
+// Renders the Poison Powder falling like staggered raindrops over the target
+void PlayPoisonPowderAnimation(SDL_Renderer* ren, SDL_Texture* movesTex, SDL_FRect* targetDst, float stateTimer) {
+    if (!movesTex || !targetDst) return;
+
+    const float fallDuration = 2.0f;
+    const float scale = 2.5f;
+    const float startY = targetDst->y - 15.0f;
+    const float fallDistance = targetDst->h + 30.0f;
+
+    SDL_FRect src;
+    src.x = 511.0f;
+    src.w = 8.0f;
+    src.h = 16.0f;
+
+    struct Drop {
+        float xOffsetPct;
+        float delay;
+    };
+
+    const Drop drops[8] = {
+        {0.15f, 0.0f}, {0.50f, 0.0f}, {0.85f, 0.0f},
+        {0.30f, 0.5f}, {0.70f, 0.5f},
+        {0.20f, 1.0f}, {0.50f, 1.0f}, {0.80f, 1.0f}
+    };
+
+    for (int i = 0; i < 8; ++i) {
+        float localTimer = stateTimer - drops[i].delay;
+
+        if (localTimer >= 0.0f && localTimer <= fallDuration) {
+            // 1. Calculate Progress (0.0 at top, 1.0 at floor)
+            float progress = localTimer / fallDuration;
+
+            // 2. Map progress to the 8 available frames (0 through 7)
+            // We multiply by 7.0f so that when progress is 1.0, we hit exactly index 7.
+            int currentFrame = static_cast<int>(progress * 7.0f);
+            src.y = 684.0f + (currentFrame * 17.0f);
+
+            SDL_FRect dst;
+            dst.w = src.w * scale;
+            dst.h = src.h * scale;
+            dst.x = targetDst->x + (targetDst->w * drops[i].xOffsetPct) - (dst.w / 2.0f);
+
+            // 3. Linear Interpolation for Y position
+            dst.y = startY + (fallDistance * progress);
+
+            SDL_RenderTexture(ren, movesTex, &src, &dst);
+        }
+    }
+}
 
 // Renders the Ember animation, cycling through 5 frames moving downwards on the sprite sheet
 void PlayEmberAnimation(SDL_Renderer* ren, SDL_Texture* movesTex,SDL_FRect *Dst, float stateTimer) {
@@ -100,8 +150,8 @@ void PlayEmberAnimation(SDL_Renderer* ren, SDL_Texture* movesTex,SDL_FRect *Dst,
 
     // Define the Source Rectangle based on your specific coordinates
     SDL_FRect src;
-    src.x = 242.0f;
-    src.y = 1165.0f + (currentFrame * 30.0f); // Move down 30 pixels per frame
+    src.x = 86.0f;
+    src.y = 270.0f + (currentFrame * 30.0f); // Move down 30 pixels per frame
     src.w = 30.0f;
     src.h = 30.0f;
 
@@ -178,7 +228,7 @@ int main() {
     SDL_Surface* mSurf = IMG_Load("res/Moves.png");
     if (mSurf) {
         // Set the color key to black (0, 0, 0) to make the background transparent
-        SDL_SetSurfaceColorKey(mSurf, true, SDL_MapSurfaceRGB(mSurf, 0, 0, 0));
+        SDL_SetSurfaceColorKey(mSurf, true, SDL_MapSurfaceRGB(mSurf, 34,177,76));
         movesTex = SDL_CreateTextureFromSurface(ren, mSurf);
         SDL_DestroySurface(mSurf);
     }
@@ -210,6 +260,8 @@ int main() {
     SDL_FRect TypeFireSrc = { 64.0f, 32.0f, 31.0f, 15.0f };
     SDL_FRect StatusFireDst = { 49.0f, 80.0f, 45.0f, 20.0f };
     SDL_FRect StatusFireSrc = { 5.0f, 88.0f, 21.0f, 8.0f };
+    SDL_FRect StatusPoisonDst = { 49.0f, 80.0f, 45.0f, 20.0f };
+    SDL_FRect StatusPoisonSrc = { 5.0f, 80.0f, 21.0f, 8.0f };
 
     //SDL_FRect menuSrc = { 144.0f, 2.0f, 124.0f, 56.0f };
     //SDL_FRect menuDst = { 430.0f, 412.0f, 380.0f, 210.0f };
@@ -356,9 +408,15 @@ int main() {
                 break;
 
             case AI_ATTACK:
-                enemyDst.x -= (stateTimer * 120.0f);
                 if (stateTimer > 0.5f) {
-                    // We will add playerHPAtStartOfHit in the next step
+                    currentState = POISON_POWDER_MOVE;
+                    stateTimer = 0.0f;
+                }
+                break;
+
+            case POISON_POWDER_MOVE:
+              
+                if (stateTimer >= 3.0f) {
                     playerHPAtStartOfHit = playerHP;
                     targetPlayerHP = playerHP - playerDamageTaken;
 
@@ -366,7 +424,6 @@ int main() {
                         targetPlayerHP = 0.0f;
                     }
 
-                    // Always transition to PLAYER_HIT to allow the animation to play
                     currentState = PLAYER_HIT;
                     stateTimer = 0.0f;
                 }
@@ -411,6 +468,10 @@ int main() {
         if (currentState == EMBER_MOVE) {
             PlayEmberAnimation(ren, movesTex, &enemyDst, stateTimer);
         }
+        if (currentState == POISON_POWDER_MOVE) {
+            PlayPoisonPowderAnimation(ren, movesTex, &playerDst, stateTimer);
+        }
+
         SDL_RenderTexture(ren, uiTex, &enemyHpSrc, &enemyHpDst);
         SDL_RenderTexture(ren, uiTex, &playerHpSrc, &playerHpDst);
 
@@ -426,7 +487,7 @@ int main() {
         }
 
         //player HP bar
-        SDL_FRect playerHpBarDst = { 598.6f, 347.0f, 135.0f, 12.0f };
+        SDL_FRect playerHpBarDst = { 599.6f, 347.0f, 137.0f, 12.0f };
         SDL_FRect playerHpBlackBarDst = { 597.0f, 347.0f, 144.0f, 12.0f };
         SDL_RenderTexture(ren, uiTex, &hpBarBlackSrc, &playerHpBlackBarDst);
         if (playerHP > 0.0f) {

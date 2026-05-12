@@ -13,19 +13,6 @@ namespace PokemonGame
         return trainer;
     }
 
-    // Factory: Creates a Wild Pokemon with stats, health, and catchable status
-    ent_type createWildPokemon(const std::string& species, int hp, int atk) {
-        ent_type pokemon = bagel::World::createEntity();
-
-        Storage<IdentityComponent>::type::add(pokemon, {species});
-        Storage<HealthComponent>::type::add(pokemon, {hp, hp});
-        Storage<StatsComponent>::type::add(pokemon, {atk, 10, 10});
-        Storage<ExperienceComponent>::type::add(pokemon, {0, 5});
-        Storage<StatusEffectComponent>::type::add(pokemon, {});
-        Storage<CatchComponent>::type::add(pokemon, {}); // Marker for wild pokemon
-
-        return pokemon;
-    }
 
     // Factory: Creates a Battle Arena to manage active combatants
     ent_type createBattleArena() {

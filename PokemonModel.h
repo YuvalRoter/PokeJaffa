@@ -30,11 +30,6 @@ namespace PokemonGame
         int speed = 10;
     };
 
-    // Experience: Progression and leveling data. (Storage: Sparse)
-    struct ExperienceComponent {
-        int xp = 0;
-        int level = 5;
-    };
 
     // Moveset: List of available moves for battle. (Storage: Packed)
     struct MovesetComponent {
@@ -62,12 +57,10 @@ namespace PokemonGame
     struct CatchComponent {};      // Indicates if entity can be caught
 
     ent_type createTrainer(const std::string& name);
-    ent_type createWildPokemon(const std::string& species, int hp, int atk);
     ent_type createBattleArena();
 
     class BattleSystem {};
     class LevelingSystem {};
-    class CaptureSystem {};
 
 
 }
@@ -78,9 +71,7 @@ namespace PokemonGame
         template <> struct Storage<PokemonGame::IdentityComponent> : NoInstance { using type = SparseStorage<PokemonGame::IdentityComponent>; };
         template <> struct Storage<PokemonGame::HealthComponent> : NoInstance { using type = SparseStorage<PokemonGame::HealthComponent>; };
         template <> struct Storage<PokemonGame::StatsComponent> : NoInstance { using type = SparseStorage<PokemonGame::StatsComponent>; };
-        template <> struct Storage<PokemonGame::ExperienceComponent> : NoInstance { using type = SparseStorage<PokemonGame::ExperienceComponent>; };
         template <> struct Storage<PokemonGame::PartyComponent> : NoInstance { using type = SparseStorage<PokemonGame::PartyComponent>; };
-        template <> struct Storage<PokemonGame::CatchComponent> : NoInstance { using type = SparseStorage<PokemonGame::CatchComponent>; };
         template <> struct Storage<PokemonGame::MovesetComponent> : NoInstance { using type = PackedStorage<PokemonGame::MovesetComponent>; };
         template <> struct Storage<PokemonGame::CombatantsComponent> : NoInstance { using type = PackedStorage<PokemonGame::CombatantsComponent>; };
         template <> struct Storage<PokemonGame::StatusEffectComponent> : NoInstance { using type = PackedStorage<PokemonGame::StatusEffectComponent>; };

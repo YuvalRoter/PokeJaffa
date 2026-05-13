@@ -104,9 +104,9 @@ void PlayPoisonPowderAnimation(SDL_Renderer* ren, SDL_Texture* movesTex, SDL_FRe
     };
 
     const Drop drops[8] = {
-        {0.15f, 0.0f}, {0.50f, 0.0f}, {0.85f, 0.0f},
-        {0.30f, 0.5f}, {0.70f, 0.5f},
-        {0.20f, 1.0f}, {0.50f, 1.0f}, {0.80f, 1.0f}
+        {0.15f, 0.0f}, {0.40f, 0.2f}, {0.85f, 0.1f},
+        {0.30f, 0.5f}, {0.70f, 0.3f},
+        {0.20f, 1.0f}, {0.50f, 0.7f}, {0.80f, 0.9f}
     };
 
     for (int i = 0; i < 8; ++i) {
@@ -385,7 +385,7 @@ int main() {
                     if (targetEnemyHP <= 0.0f) {
                         currentState = FINAL_IDLE;
                     } else {
-                        messageText = "CATERPIE USES TACKLE";
+                        messageText = "CATERPIE USES POISON POWDER";
                         currentState = MESSAGE_ENEMY_ATTACK;
                     }
                     stateTimer = 0.0f;
@@ -415,7 +415,7 @@ int main() {
                 break;
 
             case POISON_POWDER_MOVE:
-              
+
                 if (stateTimer >= 3.0f) {
                     playerHPAtStartOfHit = playerHP;
                     targetPlayerHP = playerHP - playerDamageTaken;

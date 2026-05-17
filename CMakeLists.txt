@@ -18,3 +18,7 @@ set(BUILD_SHARED_LIBS OFF)
 add_subdirectory(lib/SDL_image)
 target_link_libraries(PokeJaffa PUBLIC SDL3_image-static)
 
+if(MINGW)
+# Forces the console subsystem to the absolute end of the compiler command
+target_link_options(PokeJaffa PRIVATE "-Wl,--subsystem,console")
+endif()

@@ -1,179 +1,169 @@
+#include "bagel.h"
+#include "PokemonModel.h"
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_main.h> // פותר את שגיאת ה-Stack Overflow ב-SDL3 סטטי
 #include <SDL3_image/SDL_image.h>
 #include <cmath>
 #include <cstdlib>
 #include <vector>
 #include <unordered_map>
 #include <string>
+#include <iostream>
 
-enum BattleState {
-    ATTACK_SELECT,
-    START_IDLE,
-    TACKLE_MOVE,
-    EMBER_MOVE,
-    POISON_POWDER_MOVE,
-    ENEMY_HIT,
-    PLAYER_HIT,
-    AI_ATTACK,
-    MESSAGE_PLAYER_ATTACK,
-    MESSAGE_ENEMY_ATTACK,
-    FINAL_IDLE
-};
+namespace PokemonGame {
+    using bagel::ent_type;
+    using bagel::Storage;
+    using bagel::id_type;
 
-enum AttackType {
-    ATTACK_TACKLE,
-    ATTACK_EMBER
-};
+    enum BattleState {
+        ATTACK_SELECT,
+        START_IDLE,
+        TACKLE_MOVE,
+        EMBER_MOVE,
+        POISON_POWDER_MOVE,
+        ENEMY_HIT,
+        PLAYER_HIT,
+        AI_ATTACK,
+        MESSAGE_PLAYER_ATTACK,
+        MESSAGE_ENEMY_ATTACK,
+        FINAL_IDLE
+    };
 
-std::unordered_map<char, SDL_FRect> fontMap;
+    enum AttackType {
+        ATTACK_TACKLE,
+        ATTACK_EMBER
+    };
 
-void InitFont() {
-    fontMap.clear();
+    std::unordered_map<char, SDL_FRect> fontMap;
 
-    // --- Uppercase Alphabet Configuration ---
-    float upperX = 170.0f;
-    float upperY = 122.0f;
-    float upperW = 6.0f;
-    float upperH = 11.0f;
-    float upperStepX = 7.0f;
+    void InitFont() {
+        fontMap.clear();
+        float upperX = 170.0f;
+        float upperY = 122.0f;
+        float upperW = 6.0f;
+        float upperH = 11.0f;
+        float upperStepX = 7.0f;
 
-    std::string upperRow = "ABCDEFGHIJKLMNOPQRSTUVWXYZ.,";
+        std::string upperRow = "ABCDEFGHIJKLMNOPQRSTUVWXYZ.,";
+        for (int i = 0; i < (int)upperRow.length(); ++i) {
+            char c = upperRow[i];
+            fontMap[c] = { upperX + (i * upperStepX), upperY, upperW, upperH };
+        }
 
-    for (int i = 0; i < (int)upperRow.length(); ++i) {
-        char c = upperRow[i];
-        fontMap[c] = {
-            upperX + (i * upperStepX),
-            upperY,
-            upperW,
-            upperH
-        };
+        float numX = 170.0f;
+        float numY = 157.0f;
+        float numW = 6.0f;
+        float numH = 10.0f;
+        float numStepX = 7.0f;
+
+        std::string numRow = "0123456789";
+        for (int i = 0; i < (int)numRow.length(); ++i) {
+            char c = numRow[i];
+            fontMap[c] = { numX + (i * numStepX), numY, numW, numH };
+        }
     }
 
-    // --- Numbers Configuration ---
-    float numX = 170.0f;
-    float numY = 157.0f;
-    float numW = 6.0f;
-    float numH = 10.0f;
-    float numStepX = 7.0f;
-
-    std::string numRow = "0123456789";
-
-    for (int i = 0; i < (int)numRow.length(); ++i) {
-        char c = numRow[i];
-        fontMap[c] = {
-            numX + (i * numStepX),
-            numY,
-            numW,
-            numH
-        };
+    void RenderText(SDL_Renderer* ren, SDL_Texture* tex, const std::string& text, float x, float y, float scale) {
+        if (!tex) return;
+        float currentX = x;
+        for (char c : text) {
+            if (fontMap.count(c)) {
+                SDL_FRect src = fontMap[c];
+                SDL_FRect dst = { currentX, y, src.w * scale, src.h * scale };
+                SDL_RenderTexture(ren, tex, &src, &dst);
+                currentX += (src.w + 1.0f) * scale;
+            } else if (c == ' ') {
+                currentX += (6.0f * scale);
+            }
+        }
     }
-}
 
-// Helper function to render text using the dictionary
-void RenderText(SDL_Renderer* ren, SDL_Texture* tex, const std::string& text, float x, float y, float scale) {
-    float currentX = x;
-    for (char c : text) {
-        if (fontMap.count(c)) {
-            SDL_FRect src = fontMap[c];
-            SDL_FRect dst = { currentX, y, src.w * scale, src.h * scale };
-            SDL_RenderTexture(ren, tex, &src, &dst);
+    void PlayPoisonPowderAnimation(SDL_Renderer* ren, SDL_Texture* movesTex, SDL_FRect* targetDst, float stateTimer) {
+        if (!movesTex || !targetDst) return;
 
-            currentX += (src.w + 1.0f) * scale;
-        } else if (c == ' ') {
-            currentX += (6.0f * scale);
+        const float fallDuration = 2.0f;
+        const float scale = 2.5f;
+        const float startY = targetDst->y - 15.0f;
+        const float fallDistance = targetDst->h + 30.0f;
+
+        SDL_FRect src;
+        src.x = 511.0f;
+        src.w = 8.0f;
+        src.h = 16.0f;
+
+        struct Drop {
+            float xOffsetPct;
+            float delay;
+        };
+
+        const Drop drops[8] = {
+            {0.15f, 0.0f}, {0.40f, 0.2f}, {0.85f, 0.1f},
+            {0.30f, 0.5f}, {0.70f, 0.3f},
+            {0.20f, 1.0f}, {0.50f, 0.7f}, {0.80f, 0.9f}
+        };
+
+        for (int i = 0; i < 8; ++i) {
+            float localTimer = stateTimer - drops[i].delay;
+            if (localTimer >= 0.0f && localTimer <= fallDuration) {
+                float progress = localTimer / fallDuration;
+                int currentFrame = static_cast<int>(progress * 7.0f);
+                src.y = 684.0f + (currentFrame * 17.0f);
+
+                SDL_FRect dst;
+                dst.w = src.w * scale;
+                dst.h = src.h * scale;
+                dst.x = targetDst->x + (targetDst->w * drops[i].xOffsetPct) - (dst.w / 2.0f);
+                dst.y = startY + (fallDistance * progress);
+
+                SDL_RenderTexture(ren, movesTex, &src, &dst);
+            }
+        }
+    }
+
+    void PlayEmberAnimation(SDL_Renderer* ren, SDL_Texture* movesTex, SDL_FRect *Dst, float stateTimer) {
+        if (!movesTex || !Dst) return;
+
+        const int totalFrames = 5;
+        const float duration = 1.0f;
+        const float timePerFrame = duration / totalFrames;
+
+        int currentFrame = static_cast<int>(stateTimer / timePerFrame);
+        if (currentFrame >= totalFrames) {
+            currentFrame = totalFrames - 1;
+        }
+
+        SDL_FRect src;
+        src.x = 86.0f;
+        src.y = 270.0f + (currentFrame * 30.0f);
+        src.w = 30.0f;
+        src.h = 30.0f;
+
+        SDL_RenderTexture(ren, movesTex, &src, Dst);
+    }
+
+    void UpdateHP(float& currentHP, float startHP, float targetHP, float stateTimer, float duration) {
+        if (stateTimer >= duration) {
+            currentHP = targetHP;
+        } else {
+            float progress = stateTimer / duration;
+            currentHP = startHP + (targetHP - startHP) * progress;
         }
     }
 }
-// Renders the Poison Powder falling like staggered raindrops over the target
-void PlayPoisonPowderAnimation(SDL_Renderer* ren, SDL_Texture* movesTex, SDL_FRect* targetDst, float stateTimer) {
-    if (!movesTex || !targetDst) return;
 
-    const float fallDuration = 2.0f;
-    const float scale = 2.5f;
-    const float startY = targetDst->y - 15.0f;
-    const float fallDistance = targetDst->h + 30.0f;
+// ==========================================
+// MAIN EXECUTION
+// ==========================================
+int main(int argc, char* argv[]) {
+    using namespace PokemonGame;
 
-    SDL_FRect src;
-    src.x = 511.0f;
-    src.w = 8.0f;
-    src.h = 16.0f;
+    if (!SDL_Init(SDL_INIT_VIDEO)) return -1;
 
-    struct Drop {
-        float xOffsetPct;
-        float delay;
-    };
-
-    const Drop drops[8] = {
-        {0.15f, 0.0f}, {0.40f, 0.2f}, {0.85f, 0.1f},
-        {0.30f, 0.5f}, {0.70f, 0.3f},
-        {0.20f, 1.0f}, {0.50f, 0.7f}, {0.80f, 0.9f}
-    };
-
-    for (int i = 0; i < 8; ++i) {
-        float localTimer = stateTimer - drops[i].delay;
-
-        if (localTimer >= 0.0f && localTimer <= fallDuration) {
-            // 1. Calculate Progress (0.0 at top, 1.0 at floor)
-            float progress = localTimer / fallDuration;
-
-            // 2. Map progress to the 8 available frames (0 through 7)
-            // We multiply by 7.0f so that when progress is 1.0, we hit exactly index 7.
-            int currentFrame = static_cast<int>(progress * 7.0f);
-            src.y = 684.0f + (currentFrame * 17.0f);
-
-            SDL_FRect dst;
-            dst.w = src.w * scale;
-            dst.h = src.h * scale;
-            dst.x = targetDst->x + (targetDst->w * drops[i].xOffsetPct) - (dst.w / 2.0f);
-
-            // 3. Linear Interpolation for Y position
-            dst.y = startY + (fallDistance * progress);
-
-            SDL_RenderTexture(ren, movesTex, &src, &dst);
-        }
-    }
-}
-
-// Renders the Ember animation, cycling through 5 frames moving downwards on the sprite sheet
-void PlayEmberAnimation(SDL_Renderer* ren, SDL_Texture* movesTex,SDL_FRect *Dst, float stateTimer) {
-    if (!movesTex) return; // Safety check
-
-    const int totalFrames = 5;
-    const float duration = 1.0f;
-    const float timePerFrame = duration / totalFrames;
-
-    // Determine the current frame index (0 to 4) based on the state timer
-    int currentFrame = static_cast<int>(stateTimer / timePerFrame);
-    if (currentFrame >= totalFrames) {
-        currentFrame = totalFrames - 1; // Clamp to the last frame to prevent overflow
-    }
-
-    // Define the Source Rectangle based on your specific coordinates
-    SDL_FRect src;
-    src.x = 86.0f;
-    src.y = 270.0f + (currentFrame * 30.0f); // Move down 30 pixels per frame
-    src.w = 30.0f;
-    src.h = 30.0f;
-
-    SDL_RenderTexture(ren, movesTex, &src, Dst);
-}
-
-// Function to smoothly decrease HP over time
-void UpdateHP(float& currentHP, float startHP, float targetHP, float stateTimer, float duration) {
-    if (stateTimer >= duration) {
-        currentHP = targetHP;
-    } else {
-        // Linear Interpolation: current = start + (end - start) * (progress)
-        float progress = stateTimer / duration;
-        currentHP = startHP + (targetHP - startHP) * progress;
-    }
-}
-int main() {
-    SDL_Init(SDL_INIT_VIDEO);
     SDL_Window* win;
     SDL_Renderer* ren;
-    SDL_CreateWindowAndRenderer("Pokemon Battle POC", 800, 600, 0, &win, &ren);
+    if (!SDL_CreateWindowAndRenderer("Pokemon Battle POC", 800, 600, 0, &win, &ren)) return -1;
 
+    // Load Textures
     SDL_Texture* bgTex = IMG_LoadTexture(ren, "res/BattleBack.png");
 
     SDL_Texture* uiTex = nullptr;
@@ -227,13 +217,12 @@ int main() {
     SDL_Texture* movesTex = nullptr;
     SDL_Surface* mSurf = IMG_Load("res/Moves.png");
     if (mSurf) {
-        // Set the color key to black (0, 0, 0) to make the background transparent
-        SDL_SetSurfaceColorKey(mSurf, true, SDL_MapSurfaceRGB(mSurf, 34,177,76));
+        SDL_SetSurfaceColorKey(mSurf, true, SDL_MapSurfaceRGB(mSurf, 34, 177, 76));
         movesTex = SDL_CreateTextureFromSurface(ren, mSurf);
         SDL_DestroySurface(mSurf);
     }
-    
 
+    // Setup Rectangles
     SDL_FRect bgSrc = { 268.0f, 4.0f, 216.0f, 112.0f };
     SDL_FRect bgDst = { 0.0f, -80.0f, 800.0f, 500.0f };
     SDL_FRect msgBoxSrc = { 293.0f, 2.0f, 250.0f, 50.0f };
@@ -263,16 +252,18 @@ int main() {
     SDL_FRect StatusPoisonDst = { 49.0f, 80.0f, 45.0f, 20.0f };
     SDL_FRect StatusPoisonSrc = { 5.0f, 80.0f, 21.0f, 8.0f };
 
-    //SDL_FRect menuSrc = { 144.0f, 2.0f, 124.0f, 56.0f };
-    //SDL_FRect menuDst = { 430.0f, 412.0f, 380.0f, 210.0f };
     SDL_FRect dotSrc = { 266.0f, 2.0f, 9.0f, 12.0f };
     SDL_FRect dotDst = { 30.0f, 475.0f, 20.0f, 18.0f };
 
     SDL_FRect enemyDstBase = { 483.0f, 64.0f, 160.0f, 160.0f };
     SDL_FRect enemySrc = { 1185.0f, 55.0f, 50.0f, 45.0f };
 
+    // State Variables
     BattleState currentState = ATTACK_SELECT;
     AttackType currentAttack = ATTACK_TACKLE;
+    bool playerTurnPending = false;
+    bool enemyTurnPending = false;
+    int activeMoveId = 0;
     float stateTimer = 0.0f;
     float idleTimer = 0.0f;
     float enemyHP = 1.0f;
@@ -286,40 +277,73 @@ int main() {
     bool playerVisible = true;
     bool running = true;
     std::string messageText;
-    
-    // Attack Power Points (PP) system
-    int tacklePPCurrent = 30;
-    int tacklePPMax = 30;
-    int emberPPCurrent = 15;
-    int emberPPMax = 15;
-    
-    float playerDamageTaken = 0.5f;
-    float enemyDamageTaken = 0.35f;
-    
+
+    // Create ECS Entities
+    auto tackleMove = bagel::Entity::create();
+    tackleMove.add(MoveStats{"TACKLE", 20, 0, 30});
+
+    auto emberMove = bagel::Entity::create();
+    emberMove.add(MoveStats{"EMBER", 30, 1, 15});
+
+    auto poisonMove = bagel::Entity::create();
+    poisonMove.add(MoveStats{"POISON POWDER", 0, 2, 20});
+
+    auto playerEntity = bagel::Entity::create();
+    playerEntity.addAll(
+        IdentityComponent{"CHARMANDER"},
+        HealthComponent{100, 100},
+        StatsComponent{15, 10, 12},
+        MovesetComponent{{tackleMove.entity().id, emberMove.entity().id, 0, 0}, {30, 15, 0, 0}}
+    );
+
+    auto enemyEntity = bagel::Entity::create();
+    enemyEntity.addAll(
+        IdentityComponent{"CATERPIE"},
+        HealthComponent{60, 60},
+        StatsComponent{10, 8, 10},
+        MovesetComponent{{tackleMove.entity().id, poisonMove.entity().id, 0, 0}, {30, 20, 0, 0}}
+    );
+
     SDL_Event ev;
     InitFont();
+
+    // ==========================================
+    // MAIN GAME LOOP >:3
+    // ==========================================
     while (running) {
         while (SDL_PollEvent(&ev)) {
             if (ev.type == SDL_EVENT_QUIT) running = false;
-            
-            // Handle attack selection input
+
             if (currentState == ATTACK_SELECT && ev.type == SDL_EVENT_KEY_DOWN) {
                 if (ev.key.key == SDLK_LEFT || ev.key.key == SDLK_A) {
                     currentAttack = ATTACK_TACKLE;
                 } else if (ev.key.key == SDLK_RIGHT || ev.key.key == SDLK_D) {
                     currentAttack = ATTACK_EMBER;
                 } else if (ev.key.key == SDLK_RETURN) {
-                    // Confirm attack selection
-                    if (currentAttack == ATTACK_TACKLE && tacklePPCurrent > 0) {
-                        messageText = "CHARMANDER USES TACKLE";
-                        currentState = MESSAGE_PLAYER_ATTACK;
+                    auto& moves = playerEntity.get<MovesetComponent>();
+                    int slotIdx = (currentAttack == ATTACK_TACKLE) ? 0 : 1;
+
+                    if (moves.pp_current[slotIdx] > 0) {
+                        moves.pp_current[slotIdx]--;
+
+                        bool playerGoesFirst = determineIfPlayerGoesFirst(playerEntity, enemyEntity);
+
+                        if (playerGoesFirst) {
+                            activeMoveId = moves.move_ids[slotIdx];
+                            bagel::Entity moveEnt(ent_type{activeMoveId});
+                            messageText = std::string("CHARMANDER USES ") + moveEnt.get<MoveStats>().name;
+                            currentState = MESSAGE_PLAYER_ATTACK;
+                            enemyTurnPending = true;
+                            playerTurnPending = false;
+                        } else {
+                            activeMoveId = AiEnemy(enemyEntity);
+                            bagel::Entity moveEnt(ent_type{activeMoveId});
+                            messageText = std::string("CATERPIE USES ") + moveEnt.get<MoveStats>().name;
+                            currentState = MESSAGE_ENEMY_ATTACK;
+                            playerTurnPending = true;
+                            enemyTurnPending = false;
+                        }
                         stateTimer = 0.0f;
-                        tacklePPCurrent--;
-                    } else if (currentAttack == ATTACK_EMBER && emberPPCurrent > 0) {
-                        messageText = "CHARMANDER USES EMBER";
-                        currentState = MESSAGE_PLAYER_ATTACK;
-                        stateTimer = 0.0f;
-                        emberPPCurrent--;
                     }
                 }
             }
@@ -340,12 +364,13 @@ int main() {
                 idleTimer += 0.05f;
                 playerDst.y += std::sin(idleTimer) * 20.0f;
                 if (stateTimer >= 0.5f) {
-                    // Transition to appropriate attack
-                    if (currentAttack == ATTACK_TACKLE) {
-                        currentState = TACKLE_MOVE;
-                    } else if (currentAttack == ATTACK_EMBER) {
-                        currentState = EMBER_MOVE;
-                    }
+                    bagel::Entity moveEnt(ent_type{activeMoveId});
+                    int moveType = moveEnt.get<PokemonGame::MoveStats>().type;
+
+                    if (moveType == 0) currentState = TACKLE_MOVE;
+                    else if (moveType == 1) currentState = EMBER_MOVE;
+                    else if (moveType == 2) currentState = POISON_POWDER_MOVE;
+
                     stateTimer = 0.0f;
                 }
                 break;
@@ -354,23 +379,54 @@ int main() {
                 playerDst.x += (stateTimer * 1200.0f);
                 playerDst.y -= (stateTimer * 400.0f);
                 if (playerDst.x > 380.0f) {
-                    enemyHPAtStartOfHit = enemyHP;
-                    targetEnemyHP = enemyHP - enemyDamageTaken;
-                    if (targetEnemyHP <= 0.0f) targetEnemyHP = 0.0f;
+                    if (enemyTurnPending) {
+                        calculateAndApplyDamage(playerEntity, enemyEntity, activeMoveId);
+                    } else {
+                        calculateAndApplyDamage(enemyEntity, playerEntity, activeMoveId);
+                    }
 
-                    currentState = ENEMY_HIT;
+                    enemyHPAtStartOfHit = enemyHP;
+                    targetEnemyHP = static_cast<float>(enemyEntity.get<HealthComponent>().hp) / enemyEntity.get<HealthComponent>().max_hp;
+                    playerHPAtStartOfHit = playerHP;
+                    targetPlayerHP = static_cast<float>(playerEntity.get<HealthComponent>().hp) / playerEntity.get<HealthComponent>().max_hp;
+
+                    currentState = enemyTurnPending ? ENEMY_HIT : PLAYER_HIT;
                     stateTimer = 0.0f;
                 }
                 break;
 
             case EMBER_MOVE:
-
                 if (stateTimer >= 1.0f) {
-                    enemyHPAtStartOfHit = enemyHP;
-                    targetEnemyHP = enemyHP - enemyDamageTaken;
-                    if (targetEnemyHP <= 0.0f) targetEnemyHP = 0.0f;
+                    if (enemyTurnPending) {
+                        calculateAndApplyDamage(playerEntity, enemyEntity, activeMoveId);
+                    } else {
+                        calculateAndApplyDamage(enemyEntity, playerEntity, activeMoveId);
+                    }
 
-                    currentState = ENEMY_HIT;
+                    enemyHPAtStartOfHit = enemyHP;
+                    targetEnemyHP = static_cast<float>(enemyEntity.get<PokemonGame::HealthComponent>().hp) / enemyEntity.get<PokemonGame::HealthComponent>().max_hp;
+                    playerHPAtStartOfHit = playerHP;
+                    targetPlayerHP = static_cast<float>(playerEntity.get<PokemonGame::HealthComponent>().hp) / playerEntity.get<PokemonGame::HealthComponent>().max_hp;
+
+                    currentState = enemyTurnPending ? ENEMY_HIT : PLAYER_HIT;
+                    stateTimer = 0.0f;
+                }
+                break;
+
+            case POISON_POWDER_MOVE:
+                if (stateTimer >= 3.0f) {
+                    if (enemyTurnPending) {
+                        enemyEntity.add(PokemonGame::PoisonTag{});
+                    } else {
+                        playerEntity.add(PokemonGame::PoisonTag{});
+                    }
+
+                    playerHPAtStartOfHit = playerHP;
+                    targetPlayerHP = static_cast<float>(playerEntity.get<HealthComponent>().hp) / playerEntity.get<HealthComponent>().max_hp;
+                    enemyHPAtStartOfHit = enemyHP;
+                    targetEnemyHP = static_cast<float>(enemyEntity.get<HealthComponent>().hp) / enemyEntity.get<HealthComponent>().max_hp;
+
+                    currentState = enemyTurnPending ? ENEMY_HIT : PLAYER_HIT;
                     stateTimer = 0.0f;
                 }
                 break;
@@ -382,11 +438,20 @@ int main() {
                 if (stateTimer > 0.6f) {
                     enemyVisible = true;
                     playerDst = playerDstBase;
+
                     if (targetEnemyHP <= 0.0f) {
                         currentState = FINAL_IDLE;
-                    } else {
-                        messageText = "CATERPIE USES POISON POWDER";
+                    } else if (enemyTurnPending) {
+                        enemyTurnPending = false;
+                        activeMoveId = AiEnemy(enemyEntity);
+                        bagel::Entity moveEnt(bagel::ent_type{activeMoveId});
+                        messageText = std::string("CATERPIE USES ") + moveEnt.get<MoveStats>().name;
                         currentState = MESSAGE_ENEMY_ATTACK;
+                    } else {
+                        runStatusSystem();
+                        targetPlayerHP = static_cast<float>(playerEntity.get<HealthComponent>().hp) / playerEntity.get<HealthComponent>().max_hp;
+                        targetEnemyHP = static_cast<float>(enemyEntity.get<HealthComponent>().hp) / enemyEntity.get<HealthComponent>().max_hp;
+                        currentState = ATTACK_SELECT;
                     }
                     stateTimer = 0.0f;
                 }
@@ -394,7 +459,13 @@ int main() {
 
             case MESSAGE_PLAYER_ATTACK:
                 if (stateTimer >= 1.0f) {
-                    currentState = START_IDLE;
+                    bagel::Entity moveEnt(ent_type{activeMoveId});
+                    int moveType = moveEnt.get<MoveStats>().type;
+
+                    if (moveType == 0) currentState = TACKLE_MOVE;
+                    else if (moveType == 1) currentState = EMBER_MOVE;
+                    else if (moveType == 2) currentState = POISON_POWDER_MOVE;
+
                     stateTimer = 0.0f;
                     idleTimer = 0.0f;
                 }
@@ -402,31 +473,18 @@ int main() {
 
             case MESSAGE_ENEMY_ATTACK:
                 if (stateTimer >= 1.0f) {
-                    currentState = AI_ATTACK;
+                    bagel::Entity moveEnt(ent_type{activeMoveId});
+                    int moveType = moveEnt.get<MoveStats>().type;
+
+                    if (moveType == 0) currentState = TACKLE_MOVE;
+                    else if (moveType == 1) currentState = EMBER_MOVE;
+                    else if (moveType == 2) currentState = POISON_POWDER_MOVE;
+
                     stateTimer = 0.0f;
                 }
                 break;
 
             case AI_ATTACK:
-                if (stateTimer > 0.5f) {
-                    currentState = POISON_POWDER_MOVE;
-                    stateTimer = 0.0f;
-                }
-                break;
-
-            case POISON_POWDER_MOVE:
-
-                if (stateTimer >= 3.0f) {
-                    playerHPAtStartOfHit = playerHP;
-                    targetPlayerHP = playerHP - playerDamageTaken;
-
-                    if (targetPlayerHP <= 0.0f) {
-                        targetPlayerHP = 0.0f;
-                    }
-
-                    currentState = PLAYER_HIT;
-                    stateTimer = 0.0f;
-                }
                 break;
 
             case PLAYER_HIT:
@@ -434,13 +492,24 @@ int main() {
                 playerVisible = (int(stateTimer * 100) % 2 == 0);
                 if (stateTimer > 0.6f) {
                     playerDst = playerDstBase;
+
                     if (targetPlayerHP <= 0.0f) {
                         currentState = FINAL_IDLE;
+                    } else if (playerTurnPending) {
+                        playerTurnPending = false;
+                        auto& moves = playerEntity.get<MovesetComponent>();
+                        int slotIdx = (currentAttack == ATTACK_TACKLE) ? 0 : 1;
+                        activeMoveId = moves.move_ids[slotIdx];
+                        bagel::Entity moveEnt(ent_type{activeMoveId});
+                        messageText = std::string("CHARMANDER USES ") + moveEnt.get<MoveStats>().name;
+                        currentState = MESSAGE_PLAYER_ATTACK;
                     } else {
+                        runStatusSystem();
+                        targetPlayerHP = static_cast<float>(playerEntity.get<HealthComponent>().hp) / playerEntity.get<HealthComponent>().max_hp;
+                        targetEnemyHP = static_cast<float>(enemyEntity.get<HealthComponent>().hp) / enemyEntity.get<HealthComponent>().max_hp;
                         currentState = ATTACK_SELECT;
-                        stateTimer = 0.0f;
-                        idleTimer = 0.0f;
                     }
+                    stateTimer = 0.0f;
                 }
                 break;
 
@@ -448,7 +517,6 @@ int main() {
                 if (targetPlayerHP <= 0.0f) {
                     playerDst.y += 5.0f;
                 }
-
                 if (targetEnemyHP <= 0.0f) {
                     if (enemyYOffset < 335.0f) {
                         enemyYOffset += 5.0f;
@@ -457,14 +525,12 @@ int main() {
                 break;
         }
 
+        // Render Guard Checks
         SDL_RenderClear(ren);
-        SDL_RenderTexture(ren, bgTex, &bgSrc, &bgDst);
-        if (playerVisible) {
-            SDL_RenderTexture(ren, playerTex, &playerSrc, &playerDst);
-        }
-        if (enemyVisible) {
-            SDL_RenderTexture(ren, enemyTex, &enemySrc, &enemyDst);
-        }
+        if (bgTex) SDL_RenderTexture(ren, bgTex, &bgSrc, &bgDst);
+        if (playerVisible && playerTex) SDL_RenderTexture(ren, playerTex, &playerSrc, &playerDst);
+        if (enemyVisible && enemyTex) SDL_RenderTexture(ren, enemyTex, &enemySrc, &enemyDst);
+
         if (currentState == EMBER_MOVE) {
             PlayEmberAnimation(ren, movesTex, &enemyDst, stateTimer);
         }
@@ -472,81 +538,78 @@ int main() {
             PlayPoisonPowderAnimation(ren, movesTex, &playerDst, stateTimer);
         }
 
-        SDL_RenderTexture(ren, uiTex, &enemyHpSrc, &enemyHpDst);
-        SDL_RenderTexture(ren, uiTex, &playerHpSrc, &playerHpDst);
+        if (uiTex) {
+            SDL_RenderTexture(ren, uiTex, &enemyHpSrc, &enemyHpDst);
+            SDL_RenderTexture(ren, uiTex, &playerHpSrc, &playerHpDst);
 
-        //enemy HP bar
-        SDL_FRect enemyhpBarDst = { 149.0f, 89.0f, 134.0f, 12.0f};
-        SDL_FRect enemyhpBlackBarDst = { 145.0f, 89.0f, 143.0f, 12.0f };
+            // enemy HP bar
+            SDL_FRect enemyhpBarDst = { 149.0f, 89.0f, 134.0f, 12.0f};
+            SDL_FRect enemyhpBlackBarDst = { 145.0f, 89.0f, 143.0f, 12.0f };
+            SDL_RenderTexture(ren, uiTex, &hpBarBlackSrc, &enemyhpBlackBarDst);
+            if (enemyHP > 0.0f) {
+                SDL_FRect enemyhpGreenDst = enemyhpBarDst;
+                enemyhpGreenDst.w *= enemyHP;
+                SDL_RenderTexture(ren, uiTex, &hpBarGreenSrc, &enemyhpGreenDst);
+            }
 
-        SDL_RenderTexture(ren, uiTex, &hpBarBlackSrc, &enemyhpBlackBarDst);
-        if (enemyHP > 0.0f) {
-            SDL_FRect enemyhpGreenDst = enemyhpBarDst;
-            enemyhpGreenDst.w *= enemyHP;
-            SDL_RenderTexture(ren, uiTex, &hpBarGreenSrc, &enemyhpGreenDst);
+            // player HP bar
+            SDL_FRect playerHpBarDst = { 599.6f, 347.0f, 137.0f, 12.0f };
+            SDL_FRect playerHpBlackBarDst = { 597.0f, 347.0f, 144.0f, 12.0f };
+            SDL_RenderTexture(ren, uiTex, &hpBarBlackSrc, &playerHpBlackBarDst);
+            if (playerHP > 0.0f) {
+                SDL_FRect playerHpGreenDst = playerHpBarDst;
+                playerHpGreenDst.w *= playerHP;
+                SDL_RenderTexture(ren, uiTex, &hpBarGreenSrc, &playerHpGreenDst);
+            }
+
+            SDL_FRect currentMsgBoxDst = msgBoxDst;
+            SDL_FRect currentMsgBoxSrc = msgBoxSrc;
+            if (currentState != ATTACK_SELECT) {
+                currentMsgBoxDst = msg2BoxDst;
+                currentMsgBoxSrc = msg2BoxSrc;
+            }
+
+            SDL_RenderTexture(ren, uiTex, &currentMsgBoxSrc, &currentMsgBoxDst);
         }
 
-        //player HP bar
-        SDL_FRect playerHpBarDst = { 599.6f, 347.0f, 137.0f, 12.0f };
-        SDL_FRect playerHpBlackBarDst = { 597.0f, 347.0f, 144.0f, 12.0f };
-        SDL_RenderTexture(ren, uiTex, &hpBarBlackSrc, &playerHpBlackBarDst);
-        if (playerHP > 0.0f) {
-            SDL_FRect playerHpGreenDst = playerHpBarDst;
-            playerHpGreenDst.w *= playerHP;
-            SDL_RenderTexture(ren, uiTex, &hpBarGreenSrc, &playerHpGreenDst);
-        }
+        if (playerText) SDL_RenderTexture(ren, playerText, &playerTextSrc, &playerTextDst);
+        if (enemyText) SDL_RenderTexture(ren, enemyText, &EnemyTextSrc, &EnemyTextDst);
 
-        SDL_FRect currentMsgBoxDst = msgBoxDst;
-        SDL_FRect currentMsgBoxSrc = msgBoxSrc;
-        if (currentState != ATTACK_SELECT ) {
-
-            currentMsgBoxDst = msg2BoxDst;
-            currentMsgBoxSrc = msg2BoxSrc;
-        }
-
-
-        SDL_RenderTexture(ren, uiTex, &currentMsgBoxSrc, &currentMsgBoxDst);
-        SDL_RenderTexture(ren, playerText, &playerTextSrc, &playerTextDst);
-        SDL_RenderTexture(ren, enemyText, &EnemyTextSrc, &EnemyTextDst);
         RenderText(ren, uiTex, "4", 268.0f, 53.0f, 2.3f);
         RenderText(ren, uiTex, "6", 721.0f, 315.0f, 2.3f);
-        
-        // Render dot and attack names only in ATTACK_SELECT
+
         if (currentState == ATTACK_SELECT) {
-            // Render dot based on selected attack
             SDL_FRect dotDstAdjusted = dotDst;
             if (currentAttack == ATTACK_TACKLE) {
-                dotDstAdjusted.x = 30.0f;  // Tackle position (left)
+                dotDstAdjusted.x = 30.0f;
             } else {
                 dotDstAdjusted.x = 300.0f;
             }
-            SDL_RenderTexture(ren, uiTex, &dotSrc, &dotDstAdjusted);
-            
-            // Render type based on selected attack
-            if (currentAttack == ATTACK_TACKLE) {
-                SDL_RenderTexture(ren, TypesTex, &TypeNormalSrc, &TypeNormalDst);
-            } else {
-                SDL_RenderTexture(ren, TypesTex, &TypeFireSrc, &TypeFireDst);
-            }
-            
+            if (uiTex) SDL_RenderTexture(ren, uiTex, &dotSrc, &dotDstAdjusted);
 
-
-            // Display PP for selected attack
-            if (currentAttack == ATTACK_TACKLE) {
-                RenderText(ren, uiTex, std::to_string(tacklePPCurrent), 600.0f, 470.0f, 3.0f);
-                RenderText(ren, uiTex, std::to_string(tacklePPMax), 720.0f, 470.0f, 3.0f);
-            } else {
-                RenderText(ren, uiTex, std::to_string(emberPPCurrent), 600.0f, 470.0f, 3.0f);
-                RenderText(ren, uiTex, std::to_string(emberPPMax), 720.0f, 470.0f, 3.0f);
+            if (TypesTex) {
+                if (currentAttack == ATTACK_TACKLE) {
+                    SDL_RenderTexture(ren, TypesTex, &TypeNormalSrc, &TypeNormalDst);
+                } else {
+                    SDL_RenderTexture(ren, TypesTex, &TypeFireSrc, &TypeFireDst);
+                }
             }
-            
+
+            auto& moves = playerEntity.get<MovesetComponent>();
+            int slotIdx = (currentAttack == ATTACK_TACKLE) ? 0 : 1;
+
+            bagel::Entity moveEnt(bagel::ent_type{moves.move_ids[slotIdx]});
+            auto& moveStats = moveEnt.get<PokemonGame::MoveStats>();
+
+            RenderText(ren, uiTex, std::to_string(moves.pp_current[slotIdx]), 600.0f, 470.0f, 3.0f);
+            RenderText(ren, uiTex, std::to_string(moveStats.max_pp), 720.0f, 470.0f, 3.0f);
+
             RenderText(ren, uiTex, "TACKLE", 50.0f, 470.0f, 3.0f);
             RenderText(ren, uiTex, "EMBER", 320.0f, 470.0f, 3.0f);
         } else if (currentState == MESSAGE_PLAYER_ATTACK || currentState == MESSAGE_ENEMY_ATTACK) {
-            // Render message text
             RenderText(ren, uiTex, messageText, 50.0f, 470.0f, 3.0f);
         }
-        
+
         SDL_RenderPresent(ren);
         SDL_Delay(16);
     }

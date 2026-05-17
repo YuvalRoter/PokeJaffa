@@ -1,0 +1,48 @@
+var annotated_dup =
+[
+    [ "bagel", null, [
+      [ "Component", "structbagel_1_1_component.html", null ],
+      [ "DynamicBag", "classbagel_1_1_dynamic_bag.html", null ],
+      [ "ent_type", "structbagel_1_1ent__type.html", null ],
+      [ "Entity", "classbagel_1_1_entity.html", null ],
+      [ "Mask", "classbagel_1_1_mask.html", null ],
+      [ "MaskBuilder", "classbagel_1_1_mask_builder.html", null ],
+      [ "NoCopy", "structbagel_1_1_no_copy.html", null ],
+      [ "NoInstance", "structbagel_1_1_no_instance.html", null ],
+      [ "PackedStorage", "classbagel_1_1_packed_storage.html", null ],
+      [ "Register", "structbagel_1_1_register.html", null ],
+      [ "SparseStorage", "classbagel_1_1_sparse_storage.html", null ],
+      [ "StackStorage", "classbagel_1_1_stack_storage.html", null ],
+      [ "StaticBag", "classbagel_1_1_static_bag.html", null ],
+      [ "Storage", "structbagel_1_1_storage.html", null ],
+      [ "Storage&lt; PokemonGame::BurnTag &gt;", "structbagel_1_1_storage_3_01_pokemon_game_1_1_burn_tag_01_4.html", null ],
+      [ "Storage&lt; PokemonGame::CombatantsComponent &gt;", "structbagel_1_1_storage_3_01_pokemon_game_1_1_combatants_component_01_4.html", null ],
+      [ "Storage&lt; PokemonGame::HealthComponent &gt;", "structbagel_1_1_storage_3_01_pokemon_game_1_1_health_component_01_4.html", null ],
+      [ "Storage&lt; PokemonGame::IdentityComponent &gt;", "structbagel_1_1_storage_3_01_pokemon_game_1_1_identity_component_01_4.html", null ],
+      [ "Storage&lt; PokemonGame::MovesetComponent &gt;", "structbagel_1_1_storage_3_01_pokemon_game_1_1_moveset_component_01_4.html", null ],
+      [ "Storage&lt; PokemonGame::ParalyzeTag &gt;", "structbagel_1_1_storage_3_01_pokemon_game_1_1_paralyze_tag_01_4.html", null ],
+      [ "Storage&lt; PokemonGame::PartyComponent &gt;", "structbagel_1_1_storage_3_01_pokemon_game_1_1_party_component_01_4.html", null ],
+      [ "Storage&lt; PokemonGame::PoisonTag &gt;", "structbagel_1_1_storage_3_01_pokemon_game_1_1_poison_tag_01_4.html", null ],
+      [ "Storage&lt; PokemonGame::StatsComponent &gt;", "structbagel_1_1_storage_3_01_pokemon_game_1_1_stats_component_01_4.html", null ],
+      [ "Storage&lt; PokemonGame::StatusEffectComponent &gt;", "structbagel_1_1_storage_3_01_pokemon_game_1_1_status_effect_component_01_4.html", null ],
+      [ "TaggedStorage", "classbagel_1_1_tagged_storage.html", null ],
+      [ "World", "classbagel_1_1_world.html", null ]
+    ] ],
+    [ "PokemonGame", null, [
+      [ "BattleSystem", "class_pokemon_game_1_1_battle_system.html", null ],
+      [ "BurnTag", "struct_pokemon_game_1_1_burn_tag.html", null ],
+      [ "CombatantsComponent", "struct_pokemon_game_1_1_combatants_component.html", null ],
+      [ "ControllerComponent", "struct_pokemon_game_1_1_controller_component.html", null ],
+      [ "ent_type", "struct_pokemon_game_1_1ent__type.html", null ],
+      [ "HealthComponent", "struct_pokemon_game_1_1_health_component.html", null ],
+      [ "IdentityComponent", "struct_pokemon_game_1_1_identity_component.html", null ],
+      [ "MovesetComponent", "struct_pokemon_game_1_1_moveset_component.html", null ],
+      [ "MoveStats", "struct_pokemon_game_1_1_move_stats.html", null ],
+      [ "ParalyzeTag", "struct_pokemon_game_1_1_paralyze_tag.html", null ],
+      [ "PartyComponent", "struct_pokemon_game_1_1_party_component.html", null ],
+      [ "PoisonTag", "struct_pokemon_game_1_1_poison_tag.html", null ],
+      [ "StatsComponent", "struct_pokemon_game_1_1_stats_component.html", null ],
+      [ "StatusEffectComponent", "struct_pokemon_game_1_1_status_effect_component.html", null ],
+      [ "Storage", "struct_pokemon_game_1_1_storage.html", null ]
+    ] ]
+];

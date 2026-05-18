@@ -26,6 +26,8 @@ namespace PokemonGame {
         AI_ATTACK,
         MESSAGE_PLAYER_ATTACK,
         MESSAGE_ENEMY_ATTACK,
+        MESSAGE_POISONED,
+        POISON_TURN_START,
         FINAL_IDLE
     };
 
@@ -263,7 +265,7 @@ int main(int argc, char* argv[]) {
     AttackType currentAttack = ATTACK_TACKLE;
     bool playerTurnPending = false;
     bool enemyTurnPending = false;
-    int activeMoveId = 0;
+    bool pendingPoisonTargetEnemy = false;    bool poisonTurnActorEnemy = false;    int activeMoveId = 0;
     float stateTimer = 0.0f;
     float idleTimer = 0.0f;
     float enemyHP = 1.0f;
@@ -415,14 +417,6 @@ int main(int argc, char* argv[]) {
 
             case POISON_POWDER_MOVE:
                 if (stateTimer >= 3.0f) {
-                    if (enemyTurnPending) {
-                        // Player used Poison Powder on the enemy.
-                        PokemonGame::applyStatusEffect(enemyEntity, PokemonGame::StatusEffectComponent::Poison, 3);
-                    } else {
-                        // Enemy used Poison Powder on the player.
-                        PokemonGame::applyStatusEffect(playerEntity, PokemonGame::StatusEffectComponent::Poison, 3);
-                    }
-
                     playerHPAtStartOfHit = playerHP;
                     targetPlayerHP = static_cast<float>(playerEntity.get<HealthComponent>().hp) / playerEntity.get<HealthComponent>().max_hp;
                     enemyHPAtStartOfHit = enemyHP;
@@ -447,13 +441,25 @@ int main(int argc, char* argv[]) {
                         enemyTurnPending = false;
                         activeMoveId = AiEnemy(enemyEntity);
                         bagel::Entity moveEnt(bagel::ent_type{activeMoveId});
-                        messageText = std::string("CATERPIE USES ") + moveEnt.get<MoveStats>().name;
-                        currentState = MESSAGE_ENEMY_ATTACK;
+                        if (enemyEntity.has<PokemonGame::PoisonTag>()) {
+                            poisonTurnActorEnemy = true;
+                            messageText = "CATERPIE IS POISONED";
+                            currentState = POISON_TURN_START;
+                        } else {
+                            messageText = std::string("CATERPIE USES ") + moveEnt.get<MoveStats>().name;
+                            currentState = MESSAGE_ENEMY_ATTACK;
+                        }
                     } else {
                         runStatusSystem();
                         targetPlayerHP = static_cast<float>(playerEntity.get<HealthComponent>().hp) / playerEntity.get<HealthComponent>().max_hp;
                         targetEnemyHP = static_cast<float>(enemyEntity.get<HealthComponent>().hp) / enemyEntity.get<HealthComponent>().max_hp;
-                        currentState = ATTACK_SELECT;
+                        if (playerEntity.has<PokemonGame::PoisonTag>()) {
+                            poisonTurnActorEnemy = false;
+                            messageText = "CHARMENDER IS POISONED";
+                            currentState = POISON_TURN_START;
+                        } else {
+                            currentState = ATTACK_SELECT;
+                        }
                     }
                     stateTimer = 0.0f;
                 }
@@ -466,7 +472,10 @@ int main(int argc, char* argv[]) {
 
                     if (moveType == 0) currentState = TACKLE_MOVE;
                     else if (moveType == 1) currentState = EMBER_MOVE;
-                    else if (moveType == 2) currentState = POISON_POWDER_MOVE;
+                    else if (moveType == 2) {
+                        pendingPoisonTargetEnemy = enemyTurnPending;
+                        currentState = MESSAGE_POISONED;
+                    }
 
                     stateTimer = 0.0f;
                     idleTimer = 0.0f;
@@ -480,8 +489,30 @@ int main(int argc, char* argv[]) {
 
                     if (moveType == 0) currentState = TACKLE_MOVE;
                     else if (moveType == 1) currentState = EMBER_MOVE;
-                    else if (moveType == 2) currentState = POISON_POWDER_MOVE;
+                    else if (moveType == 2) {
+                        pendingPoisonTargetEnemy = enemyTurnPending;
+                        currentState = MESSAGE_POISONED;
+                    }
 
+                    stateTimer = 0.0f;
+                }
+                break;
+
+            case MESSAGE_POISONED:
+                if (stateTimer >= 1.0f) {
+                    if (pendingPoisonTargetEnemy) {
+                        PokemonGame::applyStatusEffect(enemyEntity, PokemonGame::StatusEffectComponent::Poison, 3);
+                    } else {
+                        PokemonGame::applyStatusEffect(playerEntity, PokemonGame::StatusEffectComponent::Poison, 3);
+                    }
+                    currentState = POISON_POWDER_MOVE;
+                    stateTimer = 0.0f;
+                }
+                break;
+
+            case POISON_TURN_START:
+                if (stateTimer >= 1.0f) {
+                    currentState = poisonTurnActorEnemy ? MESSAGE_ENEMY_ATTACK : ATTACK_SELECT;
                     stateTimer = 0.0f;
                 }
                 break;
@@ -503,13 +534,25 @@ int main(int argc, char* argv[]) {
                         int slotIdx = (currentAttack == ATTACK_TACKLE) ? 0 : 1;
                         activeMoveId = moves.move_ids[slotIdx];
                         bagel::Entity moveEnt(ent_type{activeMoveId});
-                        messageText = std::string("CHARMANDER USES ") + moveEnt.get<MoveStats>().name;
-                        currentState = MESSAGE_PLAYER_ATTACK;
+                        if (playerEntity.has<PokemonGame::PoisonTag>()) {
+                            poisonTurnActorEnemy = false;
+                            messageText = "CHARMENDER IS POISONED";
+                            currentState = POISON_TURN_START;
+                        } else {
+                            messageText = std::string("CHARMANDER USES ") + moveEnt.get<MoveStats>().name;
+                            currentState = MESSAGE_PLAYER_ATTACK;
+                        }
                     } else {
                         runStatusSystem();
                         targetPlayerHP = static_cast<float>(playerEntity.get<HealthComponent>().hp) / playerEntity.get<HealthComponent>().max_hp;
                         targetEnemyHP = static_cast<float>(enemyEntity.get<HealthComponent>().hp) / enemyEntity.get<HealthComponent>().max_hp;
-                        currentState = ATTACK_SELECT;
+                        if (playerEntity.has<PokemonGame::PoisonTag>()) {
+                            poisonTurnActorEnemy = false;
+                            messageText = "THE POKEMON WAS POISONED";
+                            currentState = POISON_TURN_START;
+                        } else {
+                            currentState = ATTACK_SELECT;
+                        }
                     }
                     stateTimer = 0.0f;
                 }
@@ -530,8 +573,33 @@ int main(int argc, char* argv[]) {
         // Render Guard Checks
         SDL_RenderClear(ren);
         if (bgTex) SDL_RenderTexture(ren, bgTex, &bgSrc, &bgDst);
-        if (playerVisible && playerTex) SDL_RenderTexture(ren, playerTex, &playerSrc, &playerDst);
-        if (enemyVisible && enemyTex) SDL_RenderTexture(ren, enemyTex, &enemySrc, &enemyDst);
+        bool playerPulse = currentState == POISON_TURN_START && !poisonTurnActorEnemy && playerEntity.has<PokemonGame::PoisonTag>();
+        bool enemyPulse = currentState == POISON_TURN_START && poisonTurnActorEnemy && enemyEntity.has<PokemonGame::PoisonTag>();
+
+        if (playerVisible && playerTex) {
+            if (playerPulse) {
+                float pulse = (std::sin(stateTimer * 8.0f) + 1.0f) / 2.0f;
+                Uint8 greenValue = static_cast<Uint8>(80 + (175 * pulse));
+                Uint8 redValue   = static_cast<Uint8>(180 + (75 * pulse));
+                SDL_SetTextureColorMod(playerTex, redValue, greenValue, 255);
+            } else {
+                SDL_SetTextureColorMod(playerTex, 255, 255, 255);
+            }
+            SDL_RenderTexture(ren, playerTex, &playerSrc, &playerDst);
+            SDL_SetTextureColorMod(playerTex, 255, 255, 255);
+        }
+        if (enemyVisible && enemyTex) {
+            if (enemyPulse) {
+                float pulse = (std::sin(stateTimer * 8.0f) + 1.0f) / 2.0f;
+                Uint8 greenValue = static_cast<Uint8>(80 + (175 * pulse));
+                Uint8 redValue   = static_cast<Uint8>(180 + (75 * pulse));
+                SDL_SetTextureColorMod(enemyTex, redValue, greenValue, 255);
+            } else {
+                SDL_SetTextureColorMod(enemyTex, 255, 255, 255);
+            }
+            SDL_RenderTexture(ren, enemyTex, &enemySrc, &enemyDst);
+            SDL_SetTextureColorMod(enemyTex, 255, 255, 255);
+        }
 
         if (currentState == EMBER_MOVE) {
             PlayEmberAnimation(ren, movesTex, &enemyDst, stateTimer);
@@ -612,7 +680,7 @@ int main(int argc, char* argv[]) {
 
             RenderText(ren, uiTex, "TACKLE", 50.0f, 470.0f, 3.0f);
             RenderText(ren, uiTex, "EMBER", 320.0f, 470.0f, 3.0f);
-        } else if (currentState == MESSAGE_PLAYER_ATTACK || currentState == MESSAGE_ENEMY_ATTACK) {
+        } else if (currentState == MESSAGE_PLAYER_ATTACK || currentState == MESSAGE_ENEMY_ATTACK || currentState == MESSAGE_POISONED || currentState == POISON_TURN_START) {
             RenderText(ren, uiTex, messageText, 50.0f, 470.0f, 3.0f);
         }
 

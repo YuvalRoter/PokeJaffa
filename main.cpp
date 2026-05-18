@@ -26,7 +26,8 @@ namespace PokemonGame {
         AI_ATTACK,
         MESSAGE_PLAYER_ATTACK,
         MESSAGE_ENEMY_ATTACK,
-        FINAL_IDLE
+        FINAL_IDLE,
+        STATUS_TICK
     };
 
     enum AttackType {
@@ -76,69 +77,6 @@ namespace PokemonGame {
                 currentX += (6.0f * scale);
             }
         }
-    }
-
-    void PlayPoisonPowderAnimation(SDL_Renderer* ren, SDL_Texture* movesTex, SDL_FRect* targetDst, float stateTimer) {
-        if (!movesTex || !targetDst) return;
-
-        const float fallDuration = 2.0f;
-        const float scale = 2.5f;
-        const float startY = targetDst->y - 15.0f;
-        const float fallDistance = targetDst->h + 30.0f;
-
-        SDL_FRect src;
-        src.x = 511.0f;
-        src.w = 8.0f;
-        src.h = 16.0f;
-
-        struct Drop {
-            float xOffsetPct;
-            float delay;
-        };
-
-        const Drop drops[8] = {
-            {0.15f, 0.0f}, {0.40f, 0.2f}, {0.85f, 0.1f},
-            {0.30f, 0.5f}, {0.70f, 0.3f},
-            {0.20f, 1.0f}, {0.50f, 0.7f}, {0.80f, 0.9f}
-        };
-
-        for (int i = 0; i < 8; ++i) {
-            float localTimer = stateTimer - drops[i].delay;
-            if (localTimer >= 0.0f && localTimer <= fallDuration) {
-                float progress = localTimer / fallDuration;
-                int currentFrame = static_cast<int>(progress * 7.0f);
-                src.y = 684.0f + (currentFrame * 17.0f);
-
-                SDL_FRect dst;
-                dst.w = src.w * scale;
-                dst.h = src.h * scale;
-                dst.x = targetDst->x + (targetDst->w * drops[i].xOffsetPct) - (dst.w / 2.0f);
-                dst.y = startY + (fallDistance * progress);
-
-                SDL_RenderTexture(ren, movesTex, &src, &dst);
-            }
-        }
-    }
-
-    void PlayEmberAnimation(SDL_Renderer* ren, SDL_Texture* movesTex, SDL_FRect *Dst, float stateTimer) {
-        if (!movesTex || !Dst) return;
-
-        const int totalFrames = 5;
-        const float duration = 1.0f;
-        const float timePerFrame = duration / totalFrames;
-
-        int currentFrame = static_cast<int>(stateTimer / timePerFrame);
-        if (currentFrame >= totalFrames) {
-            currentFrame = totalFrames - 1;
-        }
-
-        SDL_FRect src;
-        src.x = 86.0f;
-        src.y = 270.0f + (currentFrame * 30.0f);
-        src.w = 30.0f;
-        src.h = 30.0f;
-
-        SDL_RenderTexture(ren, movesTex, &src, Dst);
     }
 
     void UpdateHP(float& currentHP, float startHP, float targetHP, float stateTimer, float duration) {
@@ -249,7 +187,7 @@ int main(int argc, char* argv[]) {
     SDL_FRect TypeFireSrc = { 64.0f, 32.0f, 31.0f, 15.0f };
     SDL_FRect StatusFireDst = { 49.0f, 80.0f, 45.0f, 20.0f };
     SDL_FRect StatusFireSrc = { 5.0f, 88.0f, 21.0f, 8.0f };
-    SDL_FRect StatusPoisonDst = { 500.0f, 345.0f, 45.0f, 20.0f };
+    SDL_FRect StatusPoisonDst = { 49.0f, 80.0f, 45.0f, 20.0f };
     SDL_FRect StatusPoisonSrc = { 5.0f, 80.0f, 21.0f, 8.0f };
 
     SDL_FRect dotSrc = { 266.0f, 2.0f, 9.0f, 12.0f };
@@ -304,6 +242,91 @@ int main(int argc, char* argv[]) {
         MovesetComponent{{tackleMove.entity().id, poisonMove.entity().id, 0, 0}, {30, 20, 0, 0}}
     );
 
+    // Pokemon sprites attached to the same entities
+    playerEntity.add(SpriteComponent{playerTex, playerSrc, playerDstBase, 5, true});
+    enemyEntity.add(SpriteComponent{enemyTex, enemySrc, enemyDstBase, 5, true});
+
+    // Create Visual Entities (background + static UI)
+    auto bgEntity = bagel::Entity::create();
+    bgEntity.add(SpriteComponent{bgTex, bgSrc, bgDst, 0, true});
+
+    auto enemyHpFrameEntity = bagel::Entity::create();
+    enemyHpFrameEntity.add(SpriteComponent{uiTex, enemyHpSrc, enemyHpDst, 10, true});
+
+    auto playerHpFrameEntity = bagel::Entity::create();
+    playerHpFrameEntity.add(SpriteComponent{uiTex, playerHpSrc, playerHpDst, 10, true});
+
+    auto msgBoxEntity = bagel::Entity::create();
+    msgBoxEntity.add(SpriteComponent{uiTex, msgBoxSrc, msgBoxDst, 10, true});
+
+    auto msgBoxAltEntity = bagel::Entity::create();
+    msgBoxAltEntity.add(SpriteComponent{uiTex, msg2BoxSrc, msg2BoxDst, 10, false});
+
+    auto playerBannerEntity = bagel::Entity::create();
+    playerBannerEntity.add(SpriteComponent{playerText, playerTextSrc, playerTextDst, 20, true});
+
+    auto enemyBannerEntity = bagel::Entity::create();
+    enemyBannerEntity.add(SpriteComponent{enemyText, EnemyTextSrc, EnemyTextDst, 20, true});
+
+    auto typeNormalEntity = bagel::Entity::create();
+    typeNormalEntity.add(SpriteComponent{TypesTex, TypeNormalSrc, TypeNormalDst, 20, true});
+
+    auto typeFireEntity = bagel::Entity::create();
+    typeFireEntity.add(SpriteComponent{TypesTex, TypeFireSrc, TypeFireDst, 20, false});
+
+    auto dotEntity = bagel::Entity::create();
+    dotEntity.add(SpriteComponent{uiTex, dotSrc, dotDst, 20, true});
+
+    // Status icons: visibility synced to PoisonTag by statusIconSystem
+    auto enemyPoisonIconEntity = bagel::Entity::create();
+    enemyPoisonIconEntity.add(SpriteComponent{uiTex, StatusPoisonSrc, StatusPoisonDst, 15, false});
+    enemyPoisonIconEntity.add(StatusIconComponent{enemyEntity.entity().id});
+
+    auto playerPoisonIconEntity = bagel::Entity::create();
+    SDL_FRect playerStatusDst = { 558.0f, 350.0f, 45.0f, 20.0f };
+    playerPoisonIconEntity.add(SpriteComponent{uiTex, StatusPoisonSrc, playerStatusDst, 15, false});
+    playerPoisonIconEntity.add(StatusIconComponent{playerEntity.entity().id});
+
+    // Ember FX entity (pre-created, invisible until state entry)
+    auto emberFxEntity = bagel::Entity::create();
+    {
+        SDL_FRect emberSrc = { 86.0f, 270.0f, 30.0f, 30.0f };
+        emberFxEntity.add(SpriteComponent{movesTex, emberSrc, enemyDstBase, 6, false});
+        AnimationComponent ea;
+        ea.frameTime = 0.2f;
+        ea.totalFrames = 5;
+        ea.srcStartY = 270.0f;
+        ea.srcStepY = 30.0f;
+        ea.done = true; // start completed
+        emberFxEntity.add(ea);
+    }
+
+    // Poison powder drops (8 pre-created, invisible until state entry)
+    struct PoisonDrop { float xOffsetPct; float delay; };
+    const PoisonDrop poisonDrops[8] = {
+        {0.15f, 0.0f}, {0.40f, 0.2f}, {0.85f, 0.1f},
+        {0.30f, 0.5f}, {0.70f, 0.3f},
+        {0.20f, 1.0f}, {0.50f, 0.7f}, {0.80f, 0.9f}
+    };
+    bagel::Entity poisonDropEntities[8] = {
+        bagel::Entity::create(), bagel::Entity::create(),
+        bagel::Entity::create(), bagel::Entity::create(),
+        bagel::Entity::create(), bagel::Entity::create(),
+        bagel::Entity::create(), bagel::Entity::create()
+    };
+    for (int i = 0; i < 8; ++i) {
+        SDL_FRect dropSrc = { 511.0f, 684.0f, 8.0f, 16.0f };
+        SDL_FRect dropDst = { 0.0f, 0.0f, 8.0f * 2.5f, 16.0f * 2.5f };
+        poisonDropEntities[i].add(SpriteComponent{movesTex, dropSrc, dropDst, 6, false});
+        AnimationComponent pa;
+        pa.frameTime = 2.0f / 7.0f;
+        pa.totalFrames = 7;
+        pa.srcStartY = 684.0f;
+        pa.srcStepY = 17.0f;
+        pa.done = true;
+        poisonDropEntities[i].add(pa);
+    }
+
     SDL_Event ev;
     InitFont();
 
@@ -336,7 +359,7 @@ int main(int argc, char* argv[]) {
                             enemyTurnPending = true;
                             playerTurnPending = false;
                         } else {
-                            activeMoveId = AiEnemy(enemyEntity);
+                            activeMoveId = AiEnemy(enemyEntity, playerEntity);
                             bagel::Entity moveEnt(ent_type{activeMoveId});
                             messageText = std::string("CATERPIE USES ") + moveEnt.get<MoveStats>().name;
                             currentState = MESSAGE_ENEMY_ATTACK;
@@ -353,6 +376,9 @@ int main(int argc, char* argv[]) {
         SDL_FRect enemyDst = enemyDstBase;
         enemyDst.y += enemyYOffset;
         stateTimer += 0.016f;
+
+        // State entry detection
+        BattleState stateBefore = currentState;
 
         switch (currentState) {
             case ATTACK_SELECT:
@@ -415,12 +441,10 @@ int main(int argc, char* argv[]) {
 
             case POISON_POWDER_MOVE:
                 if (stateTimer >= 3.0f) {
-                    if (enemyTurnPending) {
-                        // Player used Poison Powder on the enemy.
-                        PokemonGame::applyStatusEffect(enemyEntity, PokemonGame::StatusEffectComponent::Poison, 3);
-                    } else {
-                        // Enemy used Poison Powder on the player.
-                        PokemonGame::applyStatusEffect(playerEntity, PokemonGame::StatusEffectComponent::Poison, 3);
+                    auto target = enemyTurnPending ? enemyEntity : playerEntity;
+                    // No-stack: only apply if not already poisoned
+                    if (!target.has<PokemonGame::PoisonTag>()) {
+                        target.add(PokemonGame::PoisonTag{3});
                     }
 
                     playerHPAtStartOfHit = playerHP;
@@ -445,15 +469,18 @@ int main(int argc, char* argv[]) {
                         currentState = FINAL_IDLE;
                     } else if (enemyTurnPending) {
                         enemyTurnPending = false;
-                        activeMoveId = AiEnemy(enemyEntity);
+                        activeMoveId = AiEnemy(enemyEntity, playerEntity);
                         bagel::Entity moveEnt(bagel::ent_type{activeMoveId});
                         messageText = std::string("CATERPIE USES ") + moveEnt.get<MoveStats>().name;
                         currentState = MESSAGE_ENEMY_ATTACK;
                     } else {
+                        // Snapshot bars before status tick so STATUS_TICK can lerp them
+                        enemyHPAtStartOfHit = enemyHP;
+                        playerHPAtStartOfHit = playerHP;
                         runStatusSystem();
                         targetPlayerHP = static_cast<float>(playerEntity.get<HealthComponent>().hp) / playerEntity.get<HealthComponent>().max_hp;
                         targetEnemyHP = static_cast<float>(enemyEntity.get<HealthComponent>().hp) / enemyEntity.get<HealthComponent>().max_hp;
-                        currentState = ATTACK_SELECT;
+                        currentState = STATUS_TICK;
                     }
                     stateTimer = 0.0f;
                 }
@@ -506,10 +533,13 @@ int main(int argc, char* argv[]) {
                         messageText = std::string("CHARMANDER USES ") + moveEnt.get<MoveStats>().name;
                         currentState = MESSAGE_PLAYER_ATTACK;
                     } else {
+                        // Snapshot bars before status tick so STATUS_TICK can lerp them
+                        enemyHPAtStartOfHit = enemyHP;
+                        playerHPAtStartOfHit = playerHP;
                         runStatusSystem();
                         targetPlayerHP = static_cast<float>(playerEntity.get<HealthComponent>().hp) / playerEntity.get<HealthComponent>().max_hp;
                         targetEnemyHP = static_cast<float>(enemyEntity.get<HealthComponent>().hp) / enemyEntity.get<HealthComponent>().max_hp;
-                        currentState = ATTACK_SELECT;
+                        currentState = STATUS_TICK;
                     }
                     stateTimer = 0.0f;
                 }
@@ -525,25 +555,91 @@ int main(int argc, char* argv[]) {
                     }
                 }
                 break;
+
+            case STATUS_TICK:
+                // Animate poison/status damage on both HP bars so it doesn't get hidden until next hit
+                UpdateHP(playerHP, playerHPAtStartOfHit, targetPlayerHP, stateTimer, 0.6f);
+                UpdateHP(enemyHP, enemyHPAtStartOfHit, targetEnemyHP, stateTimer, 0.6f);
+                if (stateTimer > 0.6f) {
+                    if (targetPlayerHP <= 0.0f || targetEnemyHP <= 0.0f) {
+                        currentState = FINAL_IDLE;
+                    } else {
+                        currentState = ATTACK_SELECT;
+                    }
+                    stateTimer = 0.0f;
+                }
+                break;
         }
 
-        // Render Guard Checks
+        // On state entry: configure animation entities for Ember / Poison Powder
+        if (currentState != stateBefore) {
+            if (currentState == EMBER_MOVE) {
+                auto& es = emberFxEntity.get<SpriteComponent>();
+                es.dst = enemyDst;
+                es.src = { 86.0f, 270.0f, 30.0f, 30.0f };
+                es.visible = true;
+                auto& ea = emberFxEntity.get<AnimationComponent>();
+                ea.timer = 0.0f;
+                ea.currentFrame = 0;
+                ea.done = false;
+            } else if (currentState == POISON_POWDER_MOVE) {
+                const float scale = 2.5f;
+                const float startY = playerDst.y - 15.0f;
+                const float fallDistance = playerDst.h + 30.0f;
+                for (int i = 0; i < 8; ++i) {
+                    auto& ps = poisonDropEntities[i].get<SpriteComponent>();
+                    ps.src = { 511.0f, 684.0f, 8.0f, 16.0f };
+                    ps.dst.w = 8.0f * scale;
+                    ps.dst.h = 16.0f * scale;
+                    ps.dst.x = playerDst.x + (playerDst.w * poisonDrops[i].xOffsetPct) - (ps.dst.w / 2.0f);
+                    ps.dst.y = startY;
+                    ps.visible = true;
+                    auto& pa = poisonDropEntities[i].get<AnimationComponent>();
+                    pa.timer = 0.0f;
+                    pa.currentFrame = 0;
+                    pa.startDelay = poisonDrops[i].delay;
+                    pa.dstStartY = startY;
+                    pa.dstFallDistance = fallDistance;
+                    pa.done = false;
+                }
+            }
+        }
+
+        // Pokemon SpriteComponents
+        {
+            auto& playerSprite = playerEntity.get<SpriteComponent>();
+            auto& enemySprite = enemyEntity.get<SpriteComponent>();
+            playerSprite.dst = playerDst;
+            playerSprite.visible = playerVisible;
+            enemySprite.dst = enemyDst;
+            enemySprite.visible = enemyVisible;
+        }
+
+        // Dynamic UI toggles: message box variant, dot position, type icon, status icon
+        {
+            auto& mb = msgBoxEntity.get<SpriteComponent>();
+            auto& mbAlt = msgBoxAltEntity.get<SpriteComponent>();
+            bool inSelect = (currentState == ATTACK_SELECT);
+            mb.visible = inSelect;
+            mbAlt.visible = !inSelect;
+
+            auto& dot = dotEntity.get<SpriteComponent>();
+            dot.visible = inSelect;
+            if (inSelect) dot.dst.x = (currentAttack == ATTACK_TACKLE) ? 30.0f : 300.0f;
+
+            auto& tn = typeNormalEntity.get<SpriteComponent>();
+            auto& tf = typeFireEntity.get<SpriteComponent>();
+            tn.visible = inSelect && (currentAttack == ATTACK_TACKLE);
+            tf.visible = inSelect && (currentAttack == ATTACK_EMBER);
+        }
+
+        // Render: ECS-driven sprites first, then dynamic overlays (HP bars + text)
         SDL_RenderClear(ren);
-        if (bgTex) SDL_RenderTexture(ren, bgTex, &bgSrc, &bgDst);
-        if (playerVisible && playerTex) SDL_RenderTexture(ren, playerTex, &playerSrc, &playerDst);
-        if (enemyVisible && enemyTex) SDL_RenderTexture(ren, enemyTex, &enemySrc, &enemyDst);
-
-        if (currentState == EMBER_MOVE) {
-            PlayEmberAnimation(ren, movesTex, &enemyDst, stateTimer);
-        }
-        if (currentState == POISON_POWDER_MOVE) {
-            PlayPoisonPowderAnimation(ren, movesTex, &playerDst, stateTimer);
-        }
+        animationSystem(0.016f);
+        statusIconSystem();
+        renderSpriteSystem(ren);
 
         if (uiTex) {
-            SDL_RenderTexture(ren, uiTex, &enemyHpSrc, &enemyHpDst);
-            SDL_RenderTexture(ren, uiTex, &playerHpSrc, &playerHpDst);
-
             // enemy HP bar
             SDL_FRect enemyhpBarDst = { 149.0f, 89.0f, 134.0f, 12.0f};
             SDL_FRect enemyhpBlackBarDst = { 145.0f, 89.0f, 143.0f, 12.0f };
@@ -563,44 +659,12 @@ int main(int argc, char* argv[]) {
                 playerHpGreenDst.w *= playerHP;
                 SDL_RenderTexture(ren, uiTex, &hpBarGreenSrc, &playerHpGreenDst);
             }
-
-            SDL_FRect currentMsgBoxDst = msgBoxDst;
-            SDL_FRect currentMsgBoxSrc = msgBoxSrc;
-            if (currentState != ATTACK_SELECT) {
-                currentMsgBoxDst = msg2BoxDst;
-                currentMsgBoxSrc = msg2BoxSrc;
-            }
-
-            SDL_RenderTexture(ren, uiTex, &currentMsgBoxSrc, &currentMsgBoxDst);
         }
-
-        if (playerText) SDL_RenderTexture(ren, playerText, &playerTextSrc, &playerTextDst);
-        if (enemyText) SDL_RenderTexture(ren, enemyText, &EnemyTextSrc, &EnemyTextDst);
 
         RenderText(ren, uiTex, "4", 268.0f, 53.0f, 2.3f);
         RenderText(ren, uiTex, "6", 721.0f, 315.0f, 2.3f);
 
-        if (playerEntity.has<PokemonGame::PoisonTag>()) {
-            SDL_RenderTexture(ren, TypesTex, &StatusPoisonSrc, &StatusPoisonDst);
-        }
-
         if (currentState == ATTACK_SELECT) {
-            SDL_FRect dotDstAdjusted = dotDst;
-            if (currentAttack == ATTACK_TACKLE) {
-                dotDstAdjusted.x = 30.0f;
-            } else {
-                dotDstAdjusted.x = 300.0f;
-            }
-            if (uiTex) SDL_RenderTexture(ren, uiTex, &dotSrc, &dotDstAdjusted);
-
-            if (TypesTex) {
-                if (currentAttack == ATTACK_TACKLE) {
-                    SDL_RenderTexture(ren, TypesTex, &TypeNormalSrc, &TypeNormalDst);
-                } else {
-                    SDL_RenderTexture(ren, TypesTex, &TypeFireSrc, &TypeFireDst);
-                }
-            }
-
             auto& moves = playerEntity.get<MovesetComponent>();
             int slotIdx = (currentAttack == ATTACK_TACKLE) ? 0 : 1;
 

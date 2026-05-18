@@ -1,5 +1,7 @@
 #include "PokemonModel.h"
 #include <cstring>
+#include <algorithm>
+#include <vector>
 
 namespace PokemonGame
 {
@@ -35,8 +37,14 @@ namespace PokemonGame
             if (!e.has<HealthComponent>()) continue;
             auto& health = e.get<HealthComponent>();
 
+            // Poison: 10% max HP per round, 3 rounds total
             if (e.has<PoisonTag>()) {
-                health.hp -= 5;
+                auto& poison = e.get<PoisonTag>();
+                int dmg = health.max_hp / 10;
+                if (dmg < 1) dmg = 1;
+                health.hp -= dmg;
+                poison.turnsLeft--;
+                if (poison.turnsLeft <= 0) e.del<PoisonTag>();
             }
             if (e.has<BurnTag>()) {
                 health.hp -= 10;
@@ -44,9 +52,12 @@ namespace PokemonGame
             if (health.hp < 0) health.hp = 0;
         }
     }
-    int AiEnemy(bagel::Entity enemy) {
+    int AiEnemy(bagel::Entity enemy, bagel::Entity target) {
         auto& health = enemy.get<HealthComponent>();
         auto& moves  = enemy.get<MovesetComponent>();
+
+        // No-stack: if the target is already poisoned, don't reapply, just Tackle
+        if (target.has<PoisonTag>()) return moves.move_ids[0];
 
         float hpPercent = static_cast<float>(health.hp) / health.max_hp;
         int randomValue = std::rand() % 100;
@@ -92,5 +103,70 @@ namespace PokemonGame
 
         defenderHealth.hp -= damageDealt;
         if (defenderHealth.hp < 0) defenderHealth.hp = 0;
+    }
+
+    // --- Visual Systems ---
+
+    void renderSpriteSystem(SDL_Renderer* ren) {
+        // Collect every sprite then draw in z-order (stable on equal z)
+        std::vector<bagel::Entity> sprites;
+        for (auto e = bagel::Entity::first(); !e.eof(); e.next()) {
+            if (e.has<SpriteComponent>()) sprites.push_back(e);
+        }
+        std::stable_sort(sprites.begin(), sprites.end(),
+            [](bagel::Entity a, bagel::Entity b) {
+                return a.get<SpriteComponent>().z < b.get<SpriteComponent>().z;
+            });
+        for (auto& e : sprites) {
+            auto& sc = e.get<SpriteComponent>();
+            if (!sc.visible || sc.tex == nullptr) continue;
+            SDL_RenderTexture(ren, sc.tex, &sc.src, &sc.dst);
+        }
+    }
+
+    void animationSystem(float dt) {
+        for (auto e = bagel::Entity::first(); !e.eof(); e.next()) {
+            if (!e.has<AnimationComponent>() || !e.has<SpriteComponent>()) continue;
+            auto& anim = e.get<AnimationComponent>();
+            auto& sprite = e.get<SpriteComponent>();
+            if (anim.done || !sprite.visible) continue;
+
+            anim.timer += dt;
+            if (anim.timer < anim.startDelay) continue;
+
+            float elapsed = anim.timer - anim.startDelay;
+            float totalDuration = anim.frameTime * anim.totalFrames;
+
+            // Frame stepping
+            int newFrame = static_cast<int>(elapsed / anim.frameTime);
+            if (newFrame >= anim.totalFrames) {
+                if (anim.loop) {
+                    newFrame = newFrame % anim.totalFrames;
+                } else {
+                    newFrame = anim.totalFrames - 1;
+                    anim.done = true;
+                    sprite.visible = false;
+                }
+            }
+            anim.currentFrame = newFrame;
+            sprite.src.y = anim.srcStartY + newFrame * anim.srcStepY;
+
+            // (poison powder drops)
+            if (anim.dstFallDistance != 0.0f) {
+                float progress = elapsed / totalDuration;
+                if (progress > 1.0f) progress = 1.0f;
+                sprite.dst.y = anim.dstStartY + anim.dstFallDistance * progress;
+            }
+        }
+    }
+
+    void statusIconSystem() {
+        for (auto e = bagel::Entity::first(); !e.eof(); e.next()) {
+            if (!e.has<StatusIconComponent>() || !e.has<SpriteComponent>()) continue;
+            auto& icon = e.get<StatusIconComponent>();
+            auto& sprite = e.get<SpriteComponent>();
+            bagel::Entity owner(ent_type{icon.ownerId});
+            sprite.visible = owner.has<PoisonTag>();
+        }
     }
 }

@@ -15,7 +15,6 @@ namespace PokemonGame
     // --- Component Definitions (Data-only structs) ---
 
     // Identity: Used to store names or unique tags. (Storage: Tag/Sparse)
-    // Fixed-size char buffer (POD) so bagel's raw-memory storage stays valid.
     struct IdentityComponent {
         char name[24] = "Unknown";
     };

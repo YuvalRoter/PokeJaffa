@@ -33,6 +33,7 @@ namespace PokemonGame
     };
 
     struct StatusEffectComponent {
+        static constexpr uint8_t Poison = 1;
         uint8_t mask = 0;
         int durationTimer = 0;
     };
@@ -72,6 +73,7 @@ namespace PokemonGame
  * * @see PokemonGame::PoisonTag, PokemonGame::BurnTag, PokemonGame::HealthComponent
  */
     void runStatusSystem();
+    void applyStatusEffect(bagel::Entity entity, uint8_t statusMask, int durationTurns);
     /**
  * @brief Probabilistic AI decision engine for the enemy active combatant.
  * * Analyzes the enemy's current health pool ratio dynamically.

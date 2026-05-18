@@ -33,15 +33,39 @@ namespace PokemonGame
     void runStatusSystem() {
         for (auto e = bagel::Entity::first(); !e.eof(); e.next()) {
             if (!e.has<HealthComponent>()) continue;
+            if (!e.has<StatusEffectComponent>()) continue;
+
+            auto& status = e.get<StatusEffectComponent>();
             auto& health = e.get<HealthComponent>();
 
-            if (e.has<PoisonTag>()) {
+            if ((status.mask & StatusEffectComponent::Poison) != 0) {
                 health.hp -= 5;
+                if (status.durationTimer > 0) {
+                    --status.durationTimer;
+                }
+                if (status.durationTimer <= 0) {
+                    if (e.has<PoisonTag>()) e.del<PoisonTag>();
+                    status.mask &= ~StatusEffectComponent::Poison;
+                }
             }
-            if (e.has<BurnTag>()) {
-                health.hp -= 10;
-            }
+
             if (health.hp < 0) health.hp = 0;
+            if (status.mask == 0) {
+                e.del<StatusEffectComponent>();
+            }
+        }
+    }
+
+    void applyStatusEffect(bagel::Entity entity, uint8_t statusMask, int durationTurns) {
+        if (!entity.has<StatusEffectComponent>()) {
+            entity.add(StatusEffectComponent{statusMask, durationTurns});
+        } else {
+            auto& status = entity.get<StatusEffectComponent>();
+            status.mask |= statusMask;
+            status.durationTimer = durationTurns;
+        }
+        if ((statusMask & StatusEffectComponent::Poison) != 0 && !entity.has<PoisonTag>()) {
+            entity.add(PoisonTag{});
         }
     }
     int AiEnemy(bagel::Entity enemy) {

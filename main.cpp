@@ -249,7 +249,7 @@ int main(int argc, char* argv[]) {
     SDL_FRect TypeFireSrc = { 64.0f, 32.0f, 31.0f, 15.0f };
     SDL_FRect StatusFireDst = { 49.0f, 80.0f, 45.0f, 20.0f };
     SDL_FRect StatusFireSrc = { 5.0f, 88.0f, 21.0f, 8.0f };
-    SDL_FRect StatusPoisonDst = { 49.0f, 80.0f, 45.0f, 20.0f };
+    SDL_FRect StatusPoisonDst = { 500.0f, 345.0f, 45.0f, 20.0f };
     SDL_FRect StatusPoisonSrc = { 5.0f, 80.0f, 21.0f, 8.0f };
 
     SDL_FRect dotSrc = { 266.0f, 2.0f, 9.0f, 12.0f };
@@ -416,9 +416,11 @@ int main(int argc, char* argv[]) {
             case POISON_POWDER_MOVE:
                 if (stateTimer >= 3.0f) {
                     if (enemyTurnPending) {
-                        enemyEntity.add(PokemonGame::PoisonTag{});
+                        // Player used Poison Powder on the enemy.
+                        PokemonGame::applyStatusEffect(enemyEntity, PokemonGame::StatusEffectComponent::Poison, 3);
                     } else {
-                        playerEntity.add(PokemonGame::PoisonTag{});
+                        // Enemy used Poison Powder on the player.
+                        PokemonGame::applyStatusEffect(playerEntity, PokemonGame::StatusEffectComponent::Poison, 3);
                     }
 
                     playerHPAtStartOfHit = playerHP;
@@ -577,6 +579,10 @@ int main(int argc, char* argv[]) {
 
         RenderText(ren, uiTex, "4", 268.0f, 53.0f, 2.3f);
         RenderText(ren, uiTex, "6", 721.0f, 315.0f, 2.3f);
+
+        if (playerEntity.has<PokemonGame::PoisonTag>()) {
+            SDL_RenderTexture(ren, TypesTex, &StatusPoisonSrc, &StatusPoisonDst);
+        }
 
         if (currentState == ATTACK_SELECT) {
             SDL_FRect dotDstAdjusted = dotDst;

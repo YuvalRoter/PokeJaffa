@@ -164,7 +164,7 @@ namespace PokemonGame
     };
 
     inline const MoveStats MOVE_DATABASE[] = {
-        {"TACKLE", 20, 0},        // ID 0
+        {"TACKLE", 15, 0},        // ID 0
         {"EMBER", 30, 1},         // ID 1
         {"POISON POWDER", 0, 2}   // ID 2
     };

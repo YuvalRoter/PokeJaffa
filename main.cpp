@@ -26,8 +26,10 @@ namespace PokemonGame {
         AI_ATTACK,
         MESSAGE_PLAYER_ATTACK,
         MESSAGE_ENEMY_ATTACK,
-        FINAL_IDLE,
-        STATUS_TICK
+        MESSAGE_POISONED,
+        POISON_TURN_TEXT,
+        STATUS_TICK,
+        FINAL_IDLE
     };
 
     enum AttackType {
@@ -187,7 +189,7 @@ int main(int argc, char* argv[]) {
     SDL_FRect TypeFireSrc = { 64.0f, 32.0f, 31.0f, 15.0f };
     SDL_FRect StatusFireDst = { 49.0f, 80.0f, 45.0f, 20.0f };
     SDL_FRect StatusFireSrc = { 5.0f, 88.0f, 21.0f, 8.0f };
-    SDL_FRect StatusPoisonDst = { 49.0f, 80.0f, 45.0f, 20.0f };
+    SDL_FRect StatusPoisonDst = { 500.0f, 345.0f, 45.0f, 20.0f };
     SDL_FRect StatusPoisonSrc = { 5.0f, 80.0f, 21.0f, 8.0f };
 
     SDL_FRect dotSrc = { 266.0f, 2.0f, 9.0f, 12.0f };
@@ -201,6 +203,10 @@ int main(int argc, char* argv[]) {
     AttackType currentAttack = ATTACK_TACKLE;
     bool playerTurnPending = false;
     bool enemyTurnPending = false;
+    bool poisonTargetIsEnemy = false;
+    bool poisonTickTargetIsEnemy = false;
+    bool enemyPoisonChecked = false;
+    bool playerPoisonChecked = false;
     int activeMoveId = 0;
     float stateTimer = 0.0f;
     float idleTimer = 0.0f;
@@ -279,12 +285,11 @@ int main(int argc, char* argv[]) {
 
     // Status icons: visibility synced to PoisonTag by statusIconSystem
     auto enemyPoisonIconEntity = bagel::Entity::create();
-    enemyPoisonIconEntity.add(SpriteComponent{uiTex, StatusPoisonSrc, StatusPoisonDst, 15, false});
+    enemyPoisonIconEntity.add(SpriteComponent{TypesTex, StatusPoisonSrc, StatusPoisonDst, 15, false});
     enemyPoisonIconEntity.add(StatusIconComponent{enemyEntity.entity().id});
 
     auto playerPoisonIconEntity = bagel::Entity::create();
-    SDL_FRect playerStatusDst = { 558.0f, 350.0f, 45.0f, 20.0f };
-    playerPoisonIconEntity.add(SpriteComponent{uiTex, StatusPoisonSrc, playerStatusDst, 15, false});
+    playerPoisonIconEntity.add(SpriteComponent{TypesTex, StatusPoisonSrc, StatusPoisonDst, 15, false});
     playerPoisonIconEntity.add(StatusIconComponent{playerEntity.entity().id});
 
     // Ember FX entity (pre-created, invisible until state entry)
@@ -329,6 +334,28 @@ int main(int argc, char* argv[]) {
 
     SDL_Event ev;
     InitFont();
+
+    // Round-end Poison Handling Routine
+    auto CheckPoisonTicks = [&]() {
+        if (!enemyPoisonChecked && enemyEntity.has<PokemonGame::PoisonTag>()) {
+            enemyPoisonChecked = true;
+            poisonTickTargetIsEnemy = true;
+            messageText = "CATERPIE IS POISONED";
+            currentState = POISON_TURN_TEXT;
+            stateTimer = 0.0f;
+        } else if (!playerPoisonChecked && playerEntity.has<PokemonGame::PoisonTag>()) {
+            playerPoisonChecked = true;
+            poisonTickTargetIsEnemy = false;
+            messageText = "CHARMANDER IS POISONED";
+            currentState = POISON_TURN_TEXT;
+            stateTimer = 0.0f;
+        } else {
+            enemyPoisonChecked = false;
+            playerPoisonChecked = false;
+            currentState = ATTACK_SELECT;
+            stateTimer = 0.0f;
+        }
+    };
 
     // ==========================================
     // MAIN GAME LOOP >:3
@@ -402,22 +429,36 @@ int main(int argc, char* argv[]) {
                 break;
 
             case TACKLE_MOVE:
-                playerDst.x += (stateTimer * 1200.0f);
-                playerDst.y -= (stateTimer * 400.0f);
-                if (playerDst.x > 380.0f) {
-                    if (enemyTurnPending) {
+                if (enemyTurnPending) {
+                    // Player attacks: approach moving up and right towards enemy
+                    playerDst.x += (stateTimer * 1200.0f);
+                    playerDst.y -= (stateTimer * 400.0f);
+                    if (playerDst.x > 380.0f) {
                         calculateAndApplyDamage(playerEntity, enemyEntity, activeMoveId);
-                    } else {
-                        calculateAndApplyDamage(enemyEntity, playerEntity, activeMoveId);
+
+                        enemyHPAtStartOfHit = enemyHP;
+                        targetEnemyHP = static_cast<float>(enemyEntity.get<HealthComponent>().hp) / enemyEntity.get<HealthComponent>().max_hp;
+                        playerHPAtStartOfHit = playerHP;
+                        targetPlayerHP = static_cast<float>(playerEntity.get<HealthComponent>().hp) / playerEntity.get<HealthComponent>().max_hp;
+
+                        currentState = ENEMY_HIT;
+                        stateTimer = 0.0f;
                     }
+                } else {
+                    // Enemy attacks: approach moving down and left towards player
+                    enemyDst.x -= (stateTimer * 1200.0f);
+                    enemyDst.y += (stateTimer * 400.0f);
+                    if (enemyDst.x < 171.0f) {
+                        calculateAndApplyDamage(enemyEntity, playerEntity, activeMoveId);
 
-                    enemyHPAtStartOfHit = enemyHP;
-                    targetEnemyHP = static_cast<float>(enemyEntity.get<HealthComponent>().hp) / enemyEntity.get<HealthComponent>().max_hp;
-                    playerHPAtStartOfHit = playerHP;
-                    targetPlayerHP = static_cast<float>(playerEntity.get<HealthComponent>().hp) / playerEntity.get<HealthComponent>().max_hp;
+                        enemyHPAtStartOfHit = enemyHP;
+                        targetEnemyHP = static_cast<float>(enemyEntity.get<HealthComponent>().hp) / enemyEntity.get<HealthComponent>().max_hp;
+                        playerHPAtStartOfHit = playerHP;
+                        targetPlayerHP = static_cast<float>(playerEntity.get<HealthComponent>().hp) / playerEntity.get<HealthComponent>().max_hp;
 
-                    currentState = enemyTurnPending ? ENEMY_HIT : PLAYER_HIT;
-                    stateTimer = 0.0f;
+                        currentState = PLAYER_HIT;
+                        stateTimer = 0.0f;
+                    }
                 }
                 break;
 
@@ -432,7 +473,7 @@ int main(int argc, char* argv[]) {
                     enemyHPAtStartOfHit = enemyHP;
                     targetEnemyHP = static_cast<float>(enemyEntity.get<PokemonGame::HealthComponent>().hp) / enemyEntity.get<PokemonGame::HealthComponent>().max_hp;
                     playerHPAtStartOfHit = playerHP;
-                    targetPlayerHP = static_cast<float>(playerEntity.get<PokemonGame::HealthComponent>().hp) / playerEntity.get<PokemonGame::HealthComponent>().max_hp;
+                    targetPlayerHP = static_cast<float>(playerEntity.get<HealthComponent>().hp) / playerEntity.get<HealthComponent>().max_hp;
 
                     currentState = enemyTurnPending ? ENEMY_HIT : PLAYER_HIT;
                     stateTimer = 0.0f;
@@ -441,16 +482,10 @@ int main(int argc, char* argv[]) {
 
             case POISON_POWDER_MOVE:
                 if (stateTimer >= 3.0f) {
-                    auto target = enemyTurnPending ? enemyEntity : playerEntity;
-                    // No-stack: only apply if not already poisoned
-                    if (!target.has<PokemonGame::PoisonTag>()) {
-                        target.add(PokemonGame::PoisonTag{3});
-                    }
-
-                    playerHPAtStartOfHit = playerHP;
-                    targetPlayerHP = static_cast<float>(playerEntity.get<HealthComponent>().hp) / playerEntity.get<HealthComponent>().max_hp;
                     enemyHPAtStartOfHit = enemyHP;
                     targetEnemyHP = static_cast<float>(enemyEntity.get<HealthComponent>().hp) / enemyEntity.get<HealthComponent>().max_hp;
+                    playerHPAtStartOfHit = playerHP;
+                    targetPlayerHP = static_cast<float>(playerEntity.get<HealthComponent>().hp) / playerEntity.get<HealthComponent>().max_hp;
 
                     currentState = enemyTurnPending ? ENEMY_HIT : PLAYER_HIT;
                     stateTimer = 0.0f;
@@ -467,20 +502,24 @@ int main(int argc, char* argv[]) {
 
                     if (targetEnemyHP <= 0.0f) {
                         currentState = FINAL_IDLE;
-                    } else if (enemyTurnPending) {
-                        enemyTurnPending = false;
-                        activeMoveId = AiEnemy(enemyEntity, playerEntity);
-                        bagel::Entity moveEnt(bagel::ent_type{activeMoveId});
-                        messageText = std::string("CATERPIE USES ") + moveEnt.get<MoveStats>().name;
-                        currentState = MESSAGE_ENEMY_ATTACK;
                     } else {
-                        // Snapshot bars before status tick so STATUS_TICK can lerp them
-                        enemyHPAtStartOfHit = enemyHP;
-                        playerHPAtStartOfHit = playerHP;
-                        runStatusSystem();
-                        targetPlayerHP = static_cast<float>(playerEntity.get<HealthComponent>().hp) / playerEntity.get<HealthComponent>().max_hp;
-                        targetEnemyHP = static_cast<float>(enemyEntity.get<HealthComponent>().hp) / enemyEntity.get<HealthComponent>().max_hp;
-                        currentState = STATUS_TICK;
+                        bagel::Entity moveEnt(ent_type{activeMoveId});
+                        int moveType = moveEnt.get<MoveStats>().type;
+                        if (moveType == 2) {
+                            messageText = "CATERPIE IS POISONED";
+                            poisonTargetIsEnemy = true;
+                            currentState = MESSAGE_POISONED;
+                        } else if (enemyTurnPending) {
+                            enemyTurnPending = false;
+                            activeMoveId = AiEnemy(enemyEntity, playerEntity);
+                            bagel::Entity mEnt(ent_type{activeMoveId});
+                            messageText = std::string("CATERPIE USES ") + mEnt.get<MoveStats>().name;
+                            currentState = MESSAGE_ENEMY_ATTACK;
+                        } else {
+                            enemyPoisonChecked = false;
+                            playerPoisonChecked = false;
+                            CheckPoisonTicks();
+                        }
                     }
                     stateTimer = 0.0f;
                 }
@@ -513,6 +552,63 @@ int main(int argc, char* argv[]) {
                 }
                 break;
 
+            case MESSAGE_POISONED:
+                if (stateTimer >= 1.0f) {
+                    if (poisonTargetIsEnemy) {
+                        if (!enemyEntity.has<PokemonGame::PoisonTag>()) {
+                            enemyEntity.add(PokemonGame::PoisonTag{3});
+                        }
+                    } else {
+                        if (!playerEntity.has<PokemonGame::PoisonTag>()) {
+                            playerEntity.add(PokemonGame::PoisonTag{3});
+                        }
+                    }
+
+                    if (enemyTurnPending) {
+                        enemyTurnPending = false;
+                        activeMoveId = AiEnemy(enemyEntity, playerEntity);
+                        bagel::Entity mEnt(ent_type{activeMoveId});
+                        messageText = std::string("CATERPIE USES ") + mEnt.get<MoveStats>().name;
+                        currentState = MESSAGE_ENEMY_ATTACK;
+                    } else if (playerTurnPending) {
+                        playerTurnPending = false;
+                        auto& moves = playerEntity.get<MovesetComponent>();
+                        int slotIdx = (currentAttack == ATTACK_TACKLE) ? 0 : 1;
+                        activeMoveId = moves.move_ids[slotIdx];
+                        bagel::Entity mEnt(ent_type{activeMoveId});
+                        messageText = std::string("CHARMANDER USES ") + mEnt.get<MoveStats>().name;
+                        currentState = MESSAGE_PLAYER_ATTACK;
+                    } else {
+                        enemyPoisonChecked = false;
+                        playerPoisonChecked = false;
+                        CheckPoisonTicks();
+                    }
+                    stateTimer = 0.0f;
+                }
+                break;
+
+            case POISON_TURN_TEXT:
+                if (stateTimer >= 1.0f) {
+                    enemyHPAtStartOfHit = enemyHP;
+                    playerHPAtStartOfHit = playerHP;
+
+                    if (poisonTickTargetIsEnemy) {
+                        auto& hc = enemyEntity.get<HealthComponent>();
+                        hc.hp -= 10;
+                        if (hc.hp < 0) hc.hp = 0;
+                        targetEnemyHP = static_cast<float>(hc.hp) / hc.max_hp;
+                    } else {
+                        auto& hc = playerEntity.get<HealthComponent>();
+                        hc.hp -= 10;
+                        if (hc.hp < 0) hc.hp = 0;
+                        targetPlayerHP = static_cast<float>(hc.hp) / hc.max_hp;
+                    }
+
+                    currentState = STATUS_TICK;
+                    stateTimer = 0.0f;
+                }
+                break;
+
             case AI_ATTACK:
                 break;
 
@@ -524,22 +620,26 @@ int main(int argc, char* argv[]) {
 
                     if (targetPlayerHP <= 0.0f) {
                         currentState = FINAL_IDLE;
-                    } else if (playerTurnPending) {
-                        playerTurnPending = false;
-                        auto& moves = playerEntity.get<MovesetComponent>();
-                        int slotIdx = (currentAttack == ATTACK_TACKLE) ? 0 : 1;
-                        activeMoveId = moves.move_ids[slotIdx];
-                        bagel::Entity moveEnt(ent_type{activeMoveId});
-                        messageText = std::string("CHARMANDER USES ") + moveEnt.get<MoveStats>().name;
-                        currentState = MESSAGE_PLAYER_ATTACK;
                     } else {
-                        // Snapshot bars before status tick so STATUS_TICK can lerp them
-                        enemyHPAtStartOfHit = enemyHP;
-                        playerHPAtStartOfHit = playerHP;
-                        runStatusSystem();
-                        targetPlayerHP = static_cast<float>(playerEntity.get<HealthComponent>().hp) / playerEntity.get<HealthComponent>().max_hp;
-                        targetEnemyHP = static_cast<float>(enemyEntity.get<HealthComponent>().hp) / enemyEntity.get<HealthComponent>().max_hp;
-                        currentState = STATUS_TICK;
+                        bagel::Entity moveEnt(ent_type{activeMoveId});
+                        int moveType = moveEnt.get<MoveStats>().type;
+                        if (moveType == 2) {
+                            messageText = "CHARMANDER IS POISONED";
+                            poisonTargetIsEnemy = false;
+                            currentState = MESSAGE_POISONED;
+                        } else if (playerTurnPending) {
+                            playerTurnPending = false;
+                            auto& moves = playerEntity.get<MovesetComponent>();
+                            int slotIdx = (currentAttack == ATTACK_TACKLE) ? 0 : 1;
+                            activeMoveId = moves.move_ids[slotIdx];
+                            bagel::Entity mEnt(ent_type{activeMoveId});
+                            messageText = std::string("CHARMANDER USES ") + mEnt.get<MoveStats>().name;
+                            currentState = MESSAGE_PLAYER_ATTACK;
+                        } else {
+                            enemyPoisonChecked = false;
+                            playerPoisonChecked = false;
+                            CheckPoisonTicks();
+                        }
                     }
                     stateTimer = 0.0f;
                 }
@@ -557,14 +657,13 @@ int main(int argc, char* argv[]) {
                 break;
 
             case STATUS_TICK:
-                // Animate poison/status damage on both HP bars so it doesn't get hidden until next hit
                 UpdateHP(playerHP, playerHPAtStartOfHit, targetPlayerHP, stateTimer, 0.6f);
                 UpdateHP(enemyHP, enemyHPAtStartOfHit, targetEnemyHP, stateTimer, 0.6f);
                 if (stateTimer > 0.6f) {
                     if (targetPlayerHP <= 0.0f || targetEnemyHP <= 0.0f) {
                         currentState = FINAL_IDLE;
                     } else {
-                        currentState = ATTACK_SELECT;
+                        CheckPoisonTicks();
                     }
                     stateTimer = 0.0f;
                 }
@@ -573,6 +672,14 @@ int main(int argc, char* argv[]) {
 
         // On state entry: configure animation entities for Ember / Poison Powder
         if (currentState != stateBefore) {
+            if (stateBefore == EMBER_MOVE) {
+                emberFxEntity.get<SpriteComponent>().visible = false;
+            } else if (stateBefore == POISON_POWDER_MOVE) {
+                for (int i = 0; i < 8; ++i) {
+                    poisonDropEntities[i].get<SpriteComponent>().visible = false;
+                }
+            }
+
             if (currentState == EMBER_MOVE) {
                 auto& es = emberFxEntity.get<SpriteComponent>();
                 es.dst = enemyDst;
@@ -584,14 +691,15 @@ int main(int argc, char* argv[]) {
                 ea.done = false;
             } else if (currentState == POISON_POWDER_MOVE) {
                 const float scale = 2.5f;
-                const float startY = playerDst.y - 15.0f;
-                const float fallDistance = playerDst.h + 30.0f;
+                SDL_FRect targetDstRect = enemyTurnPending ? enemyDst : playerDst;
+                const float startY = targetDstRect.y - 15.0f;
+                const float fallDistance = targetDstRect.h + 30.0f;
                 for (int i = 0; i < 8; ++i) {
                     auto& ps = poisonDropEntities[i].get<SpriteComponent>();
                     ps.src = { 511.0f, 684.0f, 8.0f, 16.0f };
                     ps.dst.w = 8.0f * scale;
                     ps.dst.h = 16.0f * scale;
-                    ps.dst.x = playerDst.x + (playerDst.w * poisonDrops[i].xOffsetPct) - (ps.dst.w / 2.0f);
+                    ps.dst.x = targetDstRect.x + (targetDstRect.w * poisonDrops[i].xOffsetPct) - (ps.dst.w / 2.0f);
                     ps.dst.y = startY;
                     ps.visible = true;
                     auto& pa = poisonDropEntities[i].get<AnimationComponent>();
@@ -633,11 +741,43 @@ int main(int argc, char* argv[]) {
             tf.visible = inSelect && (currentAttack == ATTACK_EMBER);
         }
 
+        // Calculate Poison Tint Pulse Animation Modifier
+        bool playerPulse = (currentState == MESSAGE_POISONED && !poisonTargetIsEnemy) ||
+                          (currentState == STATUS_TICK && !poisonTickTargetIsEnemy);
+        bool enemyPulse = (currentState == MESSAGE_POISONED && poisonTargetIsEnemy) ||
+                        (currentState == STATUS_TICK && poisonTickTargetIsEnemy);
+
+        if (playerTex) {
+            if (playerPulse) {
+                float pulse = (std::sin(stateTimer * 8.0f) + 1.0f) / 2.0f;
+                Uint8 greenValue = static_cast<Uint8>(80 + (175 * pulse));
+                Uint8 redValue   = static_cast<Uint8>(180 + (75 * pulse));
+                SDL_SetTextureColorMod(playerTex, redValue, greenValue, 255);
+            } else {
+                SDL_SetTextureColorMod(playerTex, 255, 255, 255);
+            }
+        }
+
+        if (enemyTex) {
+            if (enemyPulse) {
+                float pulse = (std::sin(stateTimer * 8.0f) + 1.0f) / 2.0f;
+                Uint8 greenValue = static_cast<Uint8>(80 + (175 * pulse));
+                Uint8 redValue   = static_cast<Uint8>(180 + (75 * pulse));
+                SDL_SetTextureColorMod(enemyTex, redValue, greenValue, 255);
+            } else {
+                SDL_SetTextureColorMod(enemyTex, 255, 255, 255);
+            }
+        }
+
         // Render: ECS-driven sprites first, then dynamic overlays (HP bars + text)
         SDL_RenderClear(ren);
         animationSystem(0.016f);
         statusIconSystem();
         renderSpriteSystem(ren);
+
+        // Reset Texture Colors to Default State
+        if (playerTex) SDL_SetTextureColorMod(playerTex, 255, 255, 255);
+        if (enemyTex) SDL_SetTextureColorMod(enemyTex, 255, 255, 255);
 
         if (uiTex) {
             // enemy HP bar
@@ -676,7 +816,7 @@ int main(int argc, char* argv[]) {
 
             RenderText(ren, uiTex, "TACKLE", 50.0f, 470.0f, 3.0f);
             RenderText(ren, uiTex, "EMBER", 320.0f, 470.0f, 3.0f);
-        } else if (currentState == MESSAGE_PLAYER_ATTACK || currentState == MESSAGE_ENEMY_ATTACK) {
+        } else if (currentState == MESSAGE_PLAYER_ATTACK || currentState == MESSAGE_ENEMY_ATTACK || currentState == MESSAGE_POISONED || currentState == POISON_TURN_TEXT || currentState == STATUS_TICK) {
             RenderText(ren, uiTex, messageText, 50.0f, 470.0f, 3.0f);
         }
 
